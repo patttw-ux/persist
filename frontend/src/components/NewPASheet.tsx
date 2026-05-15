@@ -7,8 +7,22 @@ import {
 } from "@/components/ui/sheet";
 import { api } from "@/lib/api";
 import type { PreSubmissionAudit } from "@/lib/types";
-import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
-import { type FormEvent, useEffect, useState } from "react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  FileText,
+  Loader2,
+  Upload,
+} from "lucide-react";
+import {
+  type ChangeEvent,
+  type DragEvent,
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 
 const PAYER_OPTIONS = [
@@ -48,15 +62,39 @@ const initialForm = {
 
 type FormState = typeof initialForm;
 
-function inputClass(hasError: boolean): string {
+type AutofillKey =
+  | "patient_name"
+  | "dob"
+  | "member_id"
+  | "cpt_code"
+  | "drug_name"
+  | "diagnosis_icd10"
+  | "treatment_history";
+
+const AUTOFILL_FORM_KEYS = new Set<string>([
+  "patient_name",
+  "dob",
+  "member_id",
+  "cpt_code",
+  "drug_name",
+  "diagnosis_icd10",
+  "treatment_history",
+]);
+
+function inputClass(hasError: boolean, autofilled?: boolean): string {
   return [
     "flex h-10 w-full rounded-md border bg-white px-3 py-2 text-sm text-slate-900 shadow-sm ring-offset-white placeholder:text-slate-400",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2",
     hasError ? "border-red-500" : "border-slate-200",
+    autofilled ? "ring-1 ring-blue-300" : "",
   ].join(" ");
 }
 
-function treatmentAreaClass(hasError: boolean, docHint: boolean): string {
+function treatmentAreaClass(
+  hasError: boolean,
+  docHint: boolean,
+  autofilled?: boolean
+): string {
   const border = hasError
     ? "border-red-500"
     : docHint
@@ -66,6 +104,7 @@ function treatmentAreaClass(hasError: boolean, docHint: boolean): string {
     "flex min-h-[100px] w-full rounded-md border bg-white px-3 py-2 text-sm text-slate-900 shadow-sm ring-offset-white placeholder:text-slate-400",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2",
     border,
+    autofilled ? "ring-1 ring-blue-300" : "",
   ].join(" ");
 }
 
@@ -92,6 +131,15 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
   );
   const [auditLoading, setAuditLoading] = useState(false);
   const [docHintHighlight, setDocHintHighlight] = useState(false);
+  const [noteUploading, setNoteUploading] = useState(false);
+  const [noteProcessed, setNoteProcessed] = useState(false);
+  const [autofilledKeys, setAutofilledKeys] = useState<AutofillKey[]>([]);
+  const clinicalNoteInputRef = useRef<HTMLInputElement>(null);
+
+  const isAutofilled = useCallback(
+    (k: AutofillKey) => autofilledKeys.includes(k),
+    [autofilledKeys]
+  );
 
   useEffect(() => {
     if (!open) {
@@ -101,11 +149,17 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
       setAuditResult(null);
       setAuditLoading(false);
       setDocHintHighlight(false);
+      setNoteUploading(false);
+      setNoteProcessed(false);
+      setAutofilledKeys([]);
     }
   }, [open]);
 
   const handleChange = (key: keyof FormState, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    if (AUTOFILL_FORM_KEYS.has(key)) {
+      setAutofilledKeys((prev) => prev.filter((x) => x !== key));
+    }
     const fk = key as FieldKey;
     if (
       fk === "patient_name" ||
@@ -146,10 +200,137 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
     return Object.keys(next).length === 0;
   };
 
-  const buildDiagnosisCodes = (): string[] => {
-    const code = form.diagnosis_icd10.trim();
-    return code ? [code] : [];
-  };
+  const buildDiagnosisCodes = (): string[] =>
+    form.diagnosis_icd10
+      .split(",")
+      .map((c) => c.trim())
+      .filter(Boolean);
+
+  const ingestClinicalNoteFile = useCallback(
+    (file: File) => {
+      const lower = file.name.toLowerCase();
+      if (!lower.endsWith(".pdf") && !lower.endsWith(".txt")) {
+        toast.error("Please choose a PDF or text file.", { duration: 4000 });
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const raw = typeof reader.result === "string" ? reader.result : "";
+        const trimmed = raw.trim();
+        if (!trimmed) {
+          toast.error("Could not read file", { duration: 6000 });
+          return;
+        }
+
+        const payerName = form.payer_name.trim() || "UnitedHealthcare";
+
+        void (async () => {
+          setNoteUploading(true);
+          try {
+            const result = await api.extractPAFromNote({
+              clinical_note_text: raw,
+              payer_name: payerName,
+            });
+
+            const dxJoined =
+              result.diagnosis_codes
+                ?.map((c) => String(c).trim())
+                .filter(Boolean)
+                .join(", ") ?? "";
+
+            const nextAutofill: AutofillKey[] = [];
+            if (result.patient_name?.trim()) {
+              nextAutofill.push("patient_name");
+            }
+            if (result.patient_dob?.trim()) {
+              nextAutofill.push("dob");
+            }
+            if (result.member_id?.trim()) {
+              nextAutofill.push("member_id");
+            }
+            if (result.cpt_code?.trim()) {
+              nextAutofill.push("cpt_code");
+            }
+            if (result.drug_name?.trim()) {
+              nextAutofill.push("drug_name");
+            }
+            if (dxJoined) {
+              nextAutofill.push("diagnosis_icd10");
+            }
+            if (result.treatment_history?.trim()) {
+              nextAutofill.push("treatment_history");
+            }
+
+            setForm((prev) => ({
+              ...prev,
+              patient_name:
+                result.patient_name?.trim() || prev.patient_name,
+              dob: result.patient_dob?.trim() || prev.dob,
+              member_id: result.member_id?.trim() || prev.member_id,
+              cpt_code: result.cpt_code?.trim() || prev.cpt_code,
+              drug_name: result.drug_name?.trim() || prev.drug_name,
+              diagnosis_icd10: dxJoined || prev.diagnosis_icd10,
+              treatment_history:
+                result.treatment_history?.trim() || prev.treatment_history,
+            }));
+
+            setAutofilledKeys(nextAutofill);
+            setNoteProcessed(true);
+            toast.success(
+              "Form pre-filled from clinical note — review before submitting",
+              { duration: 4000 }
+            );
+          } catch (err) {
+            const message =
+              err instanceof Error
+                ? err.message
+                : "Could not extract data from clinical note.";
+            toast.error(`Something went wrong — ${message}`, {
+              duration: 5000,
+            });
+          } finally {
+            setNoteUploading(false);
+          }
+        })();
+      };
+      reader.onerror = () => {
+        toast.error("Could not read file", { duration: 6000 });
+      };
+      reader.readAsText(file);
+    },
+    [form.payer_name]
+  );
+
+  const handleClinicalNoteInputChange = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      const f = e.target.files?.[0];
+      e.target.value = "";
+      if (!f) {
+        return;
+      }
+      ingestClinicalNoteFile(f);
+    },
+    [ingestClinicalNoteFile]
+  );
+
+  const handleClinicalNoteDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleClinicalNoteDrop = useCallback(
+    (e: DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const f = e.dataTransfer.files?.[0];
+      if (!f) {
+        return;
+      }
+      ingestClinicalNoteFile(f);
+    },
+    [ingestClinicalNoteFile]
+  );
 
   const runSubmitPA = async () => {
     const diagnosis_codes = buildDiagnosisCodes();
@@ -248,7 +429,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
     await runSubmitPA();
   };
 
-  const busy = auditLoading || submitting;
+  const busy = auditLoading || submitting || noteUploading;
   const showCritical =
     auditResult !== null && auditResult.gaps_critical.length > 0;
   const showReady =
@@ -276,6 +457,91 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
         </SheetHeader>
 
         <form onSubmit={(e) => void handleSubmit(e)} className="mt-6 space-y-4">
+          <div className="bg-blue-50 border-2 border-dashed border-blue-200 rounded-xl p-5 mb-6">
+            <div className="flex items-start gap-2">
+              <FileText
+                className="h-5 w-5 shrink-0 text-blue-600 mt-0.5"
+                aria-hidden
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-blue-800">
+                  Upload Clinical Note
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Persist will auto-fill the form from your clinical documentation
+                </p>
+              </div>
+            </div>
+
+            {noteProcessed && !noteUploading ? (
+              <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3">
+                <div className="flex gap-2">
+                  <CheckCircle2
+                    className="h-5 w-5 shrink-0 text-green-500 mt-0.5"
+                    aria-hidden
+                  />
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-green-700">
+                      Clinical note processed — form pre-filled below
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Review and edit any fields before submitting
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            <div
+              role="button"
+              tabIndex={0}
+              aria-label="Upload clinical note PDF or text file"
+              onDragOver={handleClinicalNoteDragOver}
+              onDrop={(e) => void handleClinicalNoteDrop(e)}
+              className="mt-4 cursor-pointer rounded-lg border border-blue-100 bg-white/60 px-4 py-6 text-center transition-colors hover:bg-white/90"
+              onClick={() => {
+                if (!noteUploading) {
+                  clinicalNoteInputRef.current?.click();
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  if (!noteUploading) {
+                    clinicalNoteInputRef.current?.click();
+                  }
+                }
+              }}
+            >
+              {noteUploading ? (
+                <Loader2
+                  className="h-8 w-8 animate-spin text-blue-400 mx-auto mb-2"
+                  aria-hidden
+                />
+              ) : (
+                <Upload
+                  className="h-8 w-8 text-blue-300 mx-auto mb-2"
+                  aria-hidden
+                />
+              )}
+              <p className="text-sm text-slate-500">
+                Drop clinical note PDF here or click to upload
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                Supports physician notes, referral letters, clinical summaries
+              </p>
+            </div>
+
+            <input
+              ref={clinicalNoteInputRef}
+              type="file"
+              accept=".pdf,.txt"
+              className="hidden"
+              onChange={handleClinicalNoteInputChange}
+              aria-hidden
+            />
+          </div>
+
           <div>
             <label
               htmlFor="newpa-patient_name"
@@ -288,7 +554,10 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
               value={form.patient_name}
               onChange={(e) => handleChange("patient_name", e.target.value)}
               placeholder="Full legal name"
-              className={inputClass(Boolean(fieldErrors.patient_name))}
+              className={inputClass(
+                Boolean(fieldErrors.patient_name),
+                isAutofilled("patient_name")
+              )}
               aria-invalid={Boolean(fieldErrors.patient_name)}
             />
             {fieldErrors.patient_name ? (
@@ -310,7 +579,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
               type="date"
               value={form.dob}
               onChange={(e) => handleChange("dob", e.target.value)}
-              className={inputClass(Boolean(fieldErrors.dob))}
+              className={inputClass(Boolean(fieldErrors.dob), isAutofilled("dob"))}
               aria-invalid={Boolean(fieldErrors.dob)}
             />
             {fieldErrors.dob ? (
@@ -330,7 +599,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
               value={form.member_id}
               onChange={(e) => handleChange("member_id", e.target.value)}
               placeholder="Insurance member ID"
-              className={`${inputClass(Boolean(fieldErrors.member_id))} font-mono`}
+              className={`${inputClass(Boolean(fieldErrors.member_id), isAutofilled("member_id"))} font-mono`}
               aria-invalid={Boolean(fieldErrors.member_id)}
             />
             {fieldErrors.member_id ? (
@@ -382,7 +651,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
               value={form.cpt_code}
               onChange={(e) => handleChange("cpt_code", e.target.value)}
               placeholder="e.g. J0135"
-              className={`${inputClass(false)} font-mono`}
+              className={`${inputClass(false, isAutofilled("cpt_code"))} font-mono`}
             />
           </div>
 
@@ -398,7 +667,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
               value={form.drug_name}
               onChange={(e) => handleChange("drug_name", e.target.value)}
               placeholder="e.g. Adalimumab 40mg (Humira)"
-              className={inputClass(false)}
+              className={inputClass(false, isAutofilled("drug_name"))}
             />
           </div>
 
@@ -414,7 +683,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
               value={form.diagnosis_icd10}
               onChange={(e) => handleChange("diagnosis_icd10", e.target.value)}
               placeholder="e.g. M05.79"
-              className={`${inputClass(false)} font-mono`}
+              className={`${inputClass(false, isAutofilled("diagnosis_icd10"))} font-mono`}
             />
           </div>
 
@@ -435,7 +704,8 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
               placeholder="Prior treatments attempted, duration, and outcomes..."
               className={treatmentAreaClass(
                 Boolean(fieldErrors.treatment_history),
-                docHintHighlight
+                docHintHighlight,
+                isAutofilled("treatment_history")
               )}
               aria-invalid={Boolean(fieldErrors.treatment_history)}
             />

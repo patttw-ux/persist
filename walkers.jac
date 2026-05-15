@@ -5,7 +5,8 @@
     HasDenialPattern, HasAudit,
 }
 import from abilities {
-    DenialAnalysis, AppealLetter, analyze_denial, draft_appeal_letter,
+    DenialAnalysis, AppealLetter, ClinicalNoteExtraction,
+    analyze_denial, draft_appeal_letter, extract_clinical_note,
     score_appeal_viability
 }
 import from datetime { datetime }
@@ -84,6 +85,29 @@ walker:pub submit_pa {
             "req_id": jid(req),
             "status": "submitted",
             "message": "Persist is now monitoring this authorization"
+        };
+    }
+}
+
+walker:pub extract_pa_from_note {
+    has clinical_note_text: str;
+    has payer_name: str = "UnitedHealthcare";
+
+    can extract with Root entry {
+        result = cast(ClinicalNoteExtraction, extract_clinical_note(
+            clinical_note_text=self.clinical_note_text,
+            payer_name=self.payer_name
+        ));
+
+        report {
+            "patient_name": result.patient_name,
+            "patient_dob": result.patient_dob,
+            "member_id": result.member_id,
+            "cpt_code": result.cpt_code,
+            "drug_name": result.drug_name,
+            "diagnosis_codes": result.diagnosis_codes,
+            "treatment_history": result.treatment_history,
+            "clinical_notes": result.clinical_notes
         };
     }
 }

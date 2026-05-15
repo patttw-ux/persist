@@ -24,6 +24,45 @@ obj AppealLetter {
     has full_letter: str;
 }
 
+obj ClinicalNoteExtraction {
+    has patient_name: str;
+    has patient_dob: str;
+    has member_id: str;
+    has cpt_code: str;
+    has drug_name: str;
+    has diagnosis_codes: list[str];
+    has treatment_history: str;
+    has clinical_notes: str;
+}
+
+def extract_clinical_note(
+    clinical_note_text: str,
+    payer_name: str
+) -> ClinicalNoteExtraction {
+    response: any = anthropic_client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=1000,
+        messages=[{
+            "role": "user",
+            "content": "Extract structured data from this clinical note for prior authorization. Return ONLY raw JSON with these exact fields: patient_name (string), patient_dob (string YYYY-MM-DD format), member_id (string), cpt_code (string, most relevant procedure code), drug_name (string, medication or service name), diagnosis_codes (array of ICD-10 strings), treatment_history (string, summary of prior treatments), clinical_notes (string, relevant clinical findings). If any field cannot be determined return empty string or empty array.\n\nPayer: " + payer_name + "\n\nClinical Note:\n" + clinical_note_text
+        }]
+    );
+    text: str = cast(str, response.content[0].text);
+    json_match: any = re.search(r'\{.*\}', text, re.DOTALL);
+    clean_json: str = cast(str, json_match.group(0)) if json_match else text;
+    data: any = json.loads(clean_json);
+    return ClinicalNoteExtraction(
+        patient_name=cast(str, data.get("patient_name", "")),
+        patient_dob=cast(str, data.get("patient_dob", "")),
+        member_id=cast(str, data.get("member_id", "")),
+        cpt_code=cast(str, data.get("cpt_code", "")),
+        drug_name=cast(str, data.get("drug_name", "")),
+        diagnosis_codes=cast(list[str], data.get("diagnosis_codes", [])),
+        treatment_history=cast(str, data.get("treatment_history", "")),
+        clinical_notes=cast(str, data.get("clinical_notes", ""))
+    );
+}
+
 def analyze_denial(
     denial_text: str,
     payer_name: str,
