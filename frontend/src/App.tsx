@@ -9,7 +9,7 @@ function App() {
       <Toaster richColors position="top-right" />
       <Routes>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/case/:case_id" element={<CaseDetail />} />
+        <Route path="/case/:caseId" element={<CaseDetail />} />
       </Routes>
     </BrowserRouter>
   );

@@ -110,7 +110,7 @@ function ViabilityScoreDisplay({ percent }: { percent: number }) {
 
 export function CaseDetail() {
   const navigate = useNavigate();
-  const { case_id } = useParams<{ case_id: string }>();
+  const { caseId } = useParams<{ caseId: string }>();
 
   const [caseData, setCaseData] = useState<CaseDetail | null>(null);
   const [caseLoadError, setCaseLoadError] = useState<string | null>(null);
@@ -123,12 +123,12 @@ export function CaseDetail() {
   const [appealActionBusy, setAppealActionBusy] = useState(false);
 
   const loadCase = useCallback(async () => {
-    if (!case_id) {
+    if (!caseId) {
       return;
     }
     setCaseLoadError(null);
     try {
-      const data = await api.getCaseDetail(case_id);
+      const data = await api.getCaseDetail(caseId);
       setCaseData(data);
     } catch (e) {
       const msg =
@@ -136,7 +136,7 @@ export function CaseDetail() {
       setCaseLoadError(msg);
       toast.error(msg);
     }
-  }, [case_id]);
+  }, [caseId]);
 
   useEffect(() => {
     void loadCase();
@@ -171,14 +171,14 @@ export function CaseDetail() {
   }, []);
 
   useEffect(() => {
-    if (!case_id) {
+    if (!caseId) {
       return;
     }
     setAgentStreaming(true);
     setAgentStreamError(null);
 
     const cleanup = createAgentStream(
-      case_id,
+      caseId,
       onStep,
       () => {
         setAgentStreaming(false);
@@ -191,7 +191,7 @@ export function CaseDetail() {
     );
 
     return cleanup;
-  }, [case_id, onStep]);
+  }, [caseId, onStep]);
 
   const completedSteps = useMemo(
     () => steps.filter((s) => s.status === "done").length,
@@ -213,7 +213,7 @@ export function CaseDetail() {
   }, [latestViabilityScore, caseData?.denial?.appeal_viability_score]);
 
   const handleGenerateAppeal = useCallback(async () => {
-    if (!case_id) {
+    if (!caseId) {
       return;
     }
     setAppealActionBusy(true);
@@ -227,7 +227,7 @@ export function CaseDetail() {
       return next;
     });
     try {
-      await api.draftAppeal({ case_id });
+      await api.draftAppeal({ case_id: caseId });
       await loadCase();
       setSteps((prev) => {
         const next = [...prev];
@@ -260,10 +260,10 @@ export function CaseDetail() {
     } finally {
       setAppealActionBusy(false);
     }
-  }, [case_id, loadCase]);
+  }, [caseId, loadCase]);
 
   const handleSubmitAppeal = useCallback(async () => {
-    if (!case_id || !caseData?.appeal) {
+    if (!caseId || !caseData?.appeal) {
       return;
     }
     setAppealActionBusy(true);
@@ -278,7 +278,7 @@ export function CaseDetail() {
     } finally {
       setAppealActionBusy(false);
     }
-  }, [case_id, caseData?.appeal, loadCase]);
+  }, [caseId, caseData?.appeal, loadCase]);
 
   const handleCopyLetter = useCallback(() => {
     if (!caseData?.appeal?.full_letter) {
@@ -288,7 +288,7 @@ export function CaseDetail() {
     toast.success("Letter copied to clipboard");
   }, [caseData?.appeal?.full_letter]);
 
-  if (!case_id) {
+  if (!caseId) {
     return (
       <div className="min-h-screen bg-[#F8FAFC]">
         <AppHeader />

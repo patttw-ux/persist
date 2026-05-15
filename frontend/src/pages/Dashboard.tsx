@@ -1,13 +1,7 @@
 import { AppHeader } from "@/components/AppHeader";
+import { NewPASheet } from "@/components/NewPASheet";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { useCountUp } from "@/hooks/useCountUp";
 import { api } from "@/lib/api";
 import { formatRelativeTime } from "@/lib/formatRelativeTime";
@@ -159,7 +153,7 @@ export function Dashboard() {
   const navigate = useNavigate();
   const [cases, setCases] = useState<PACase[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newPAOpen, setNewPAOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   const loadCases = useCallback(async () => {
     setLoading(true);
@@ -214,7 +208,7 @@ export function Dashboard() {
             </div>
             <button
               type="button"
-              onClick={() => setNewPAOpen(true)}
+              onClick={() => setSheetOpen(true)}
               className="inline-flex shrink-0 items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
             >
               <Plus className="h-4 w-4" />
@@ -281,7 +275,7 @@ export function Dashboard() {
               </p>
               <button
                 type="button"
-                onClick={() => setNewPAOpen(true)}
+                onClick={() => setSheetOpen(true)}
                 className="mt-4 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
               >
                 Submit First PA Request
@@ -375,17 +369,14 @@ export function Dashboard() {
         </div>
       </main>
 
-      <Sheet open={newPAOpen} onOpenChange={setNewPAOpen}>
-        <SheetContent side="right" className="sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>New PA request</SheetTitle>
-            <SheetDescription>
-              New PA form — coming soon. This panel will collect patient, payer, and
-              service details for submission.
-            </SheetDescription>
-          </SheetHeader>
-        </SheetContent>
-      </Sheet>
+      <NewPASheet
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        onSuccess={() => {
+          setSheetOpen(false);
+          void loadCases();
+        }}
+      />
     </div>
   );
 }
