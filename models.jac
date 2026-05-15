@@ -58,9 +58,36 @@ node MonitorStatus {
     has payer_response_received: bool = False;
 }
 
+node PayerProfile {
+    has payer_id: str;
+    has payer_name: str;
+    has criteria_engine: str;
+    has avg_denial_rate: float = 0.0;
+    has avg_appeal_overturn_rate: float = 0.0;
+    has step_therapy_required: bool = False;
+    has expedited_timeline_hours: int = 72;
+    has standard_timeline_days: int = 7;
+    has appeal_language_notes: str = "";
+    has common_denial_reasons: list[str] = [];
+}
+
+node DenialPattern {
+    has pattern_id: str;
+    has payer_name: str;
+    has cpt_code: str;
+    has denial_type: str;
+    has criterion_failed: str;
+    has successful_appeal_language: str = "";
+    has times_seen: int = 1;
+    has times_won: int = 0;
+    has win_rate: float = 0.0;
+}
+
 # Typed edges
 edge HasRequest { has created_at: str = ""; }
 edge HasDenial  { has detected_at: str = ""; }
 edge HasAppeal  { has filed_at: str = ""; }
 edge HasMonitor {}
 edge NextStep   {}
+edge HasPayerProfile {}
+edge HasDenialPattern {}

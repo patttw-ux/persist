@@ -21,35 +21,45 @@ obj AppealLetter {
 }
 
 # Ability 1: Parse denial letter into structured analysis
-sem analyze_denial = "Analyzes a prior authorization denial letter and extracts structured clinical information sufficient to draft a winning appeal";
-sem analyze_denial.denial_text = "The complete text of the payer denial letter including reason codes CO-50 or CO-97 and narrative explanation";
-sem analyze_denial.payer_name = "Name of the insurance payer such as UnitedHealthcare using InterQual criteria or BCBS using AIM Specialty Health criteria";
-sem analyze_denial.cpt_code = "The CPT or HCPCS procedure code that was denied such as J0135 for adalimumab";
-sem analyze_denial.patient_diagnosis = "The primary ICD-10 diagnosis code and description such as M05.79 rheumatoid arthritis";
-sem analyze_denial.return = "Structured analysis including denial type (medical_necessity/step_therapy/administrative/non_covered), the exact criterion that was not met, list of missing documentation items, recommended appeal strategy, and plain English summary of why it was denied";
+sem analyze_denial = "Analyzes a prior authorization denial letter using payer-specific criteria knowledge";
+sem analyze_denial.denial_text = "The complete text of the payer denial letter including reason codes and narrative";
+sem analyze_denial.payer_name = "Name of the insurance payer";
+sem analyze_denial.payer_criteria_engine = "The clinical criteria engine this payer uses: InterQual for UHC, AIM Specialty Health for BCBS, Clinical Policy Bulletins for Aetna, proprietary for Cigna";
+sem analyze_denial.payer_appeal_notes = "Payer-specific appeal strategy notes including what language works, what criteria to cite, and common winning patterns";
+sem analyze_denial.cpt_code = "The CPT or HCPCS procedure code that was denied";
+sem analyze_denial.patient_diagnosis = "The primary ICD-10 diagnosis code and description";
+sem analyze_denial.return = "Structured analysis using payer-specific criteria knowledge including denial type, failed criterion, missing documentation, appeal strategy, and denial summary";
 def analyze_denial(
     denial_text: str,
     payer_name: str,
+    payer_criteria_engine: str,
+    payer_appeal_notes: str,
     cpt_code: str,
     patient_diagnosis: str
 ) -> DenialAnalysis by llm();
 
 # Ability 2: Draft formal appeal letter
-sem draft_appeal_letter = "Drafts a complete formal prior authorization appeal letter ready for submission to the payer that will overturn the denial";
-sem draft_appeal_letter.denial_analysis = "The structured analysis of why the PA was denied including denial type and failed criterion";
+sem draft_appeal_letter = "Drafts a complete formal prior authorization appeal letter using payer-specific criteria and winning language patterns";
+sem draft_appeal_letter.denial_analysis = "Structured analysis of the denial";
 sem draft_appeal_letter.patient_name = "Full legal name of the patient";
-sem draft_appeal_letter.drug_or_service = "The medication name or medical service being requested such as adalimumab 40mg Humira";
-sem draft_appeal_letter.diagnosis = "The clinical diagnosis with ICD-10 code justifying this treatment";
-sem draft_appeal_letter.treatment_history = "Prior treatments attempted including step therapy failures with drug names dates doses and outcomes";
-sem draft_appeal_letter.clinical_evidence = "Supporting clinical evidence including lab values validated scores such as DAS28-CRP or PHQ-9 imaging findings and specialty society guidelines that support medical necessity";
-sem draft_appeal_letter.return = "A complete formal appeal letter following ERISA requirements with subject line opening paragraph citing the specific denial criterion point-by-point rebuttal clinical justification table of prior treatments evidence citations and respectful closing requesting expedited review";
+sem draft_appeal_letter.drug_or_service = "The medication or service being requested";
+sem draft_appeal_letter.diagnosis = "The clinical diagnosis with ICD-10 code";
+sem draft_appeal_letter.treatment_history = "Prior treatments attempted including step therapy failures";
+sem draft_appeal_letter.clinical_evidence = "Supporting clinical evidence including lab values and scores";
+sem draft_appeal_letter.payer_name = "Insurance payer name for payer-specific language";
+sem draft_appeal_letter.criteria_engine = "Clinical criteria engine: InterQual, AIM, CPB, or proprietary";
+sem draft_appeal_letter.appeal_language_notes = "Payer-specific winning appeal language patterns and what criteria to cite";
+sem draft_appeal_letter.return = "Complete formal appeal letter using payer-specific language that matches what this payer reviewers look for";
 def draft_appeal_letter(
     denial_analysis: DenialAnalysis,
     patient_name: str,
     drug_or_service: str,
     diagnosis: str,
     treatment_history: str,
-    clinical_evidence: str
+    clinical_evidence: str,
+    payer_name: str,
+    criteria_engine: str,
+    appeal_language_notes: str
 ) -> AppealLetter by llm();
 
 # Ability 3: Score appeal viability (deterministic baseline + LLM refinement)

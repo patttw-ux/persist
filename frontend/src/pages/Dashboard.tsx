@@ -224,6 +224,11 @@ export function Dashboard() {
       let data = await api.getAllCases();
       if (data.length === 0) {
         await api.seedDemoData();
+        try {
+          await api.seedPayerIntelligence();
+        } catch {
+          /* Non-fatal — queue still loads without seeded payer profiles */
+        }
         data = await api.getAllCases();
       }
       const normalized = data.map(normalizeCase);

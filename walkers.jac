@@ -1,6 +1,8 @@
 import from models {
     PatientCase, PARequest, DenialRecord, AppealRecord, MonitorStatus,
-    HasRequest, HasDenial, HasAppeal, HasMonitor
+    PayerProfile, DenialPattern,
+    HasRequest, HasDenial, HasAppeal, HasMonitor, HasPayerProfile,
+    HasDenialPattern,
 }
 import from abilities {
     DenialAnalysis, AppealLetter, analyze_denial, draft_appeal_letter,
@@ -13,6 +15,18 @@ import asyncio;
 
 def case_created_at(item: dict[str, str]) -> str {
     return item["created_at"];
+}
+
+def payer_profile_strings(payer_name: str, profiles: list[PayerProfile]) -> list[str] {
+    criteria_engine = "";
+    appeal_notes = "";
+    for p in profiles {
+        if p.payer_name == payer_name {
+            criteria_engine = p.criteria_engine;
+            appeal_notes = p.appeal_language_notes;
+        }
+    }
+    return [criteria_engine, appeal_notes];
 }
 
 walker:pub submit_pa {
@@ -83,9 +97,14 @@ walker:pub parse_denial {
 
         payer_name: str = patient_case.payer_name;
 
+        profiles_aa: list[PayerProfile] = [root->:HasPayerProfile:->][?:PayerProfile];
+        pay_pair = payer_profile_strings(payer_name, profiles_aa);
+
         analysis = cast(DenialAnalysis, analyze_denial(
             denial_text=self.raw_denial_text,
             payer_name=payer_name,
+            payer_criteria_engine=pay_pair[0],
+            payer_appeal_notes=pay_pair[1],
             cpt_code=req.cpt_code,
             patient_diagnosis=req.diagnosis_codes[0] if req.diagnosis_codes else ""
         ) by llm());
@@ -158,6 +177,9 @@ walker:pub draft_appeal {
         evidence: str = req.treatment_history;
         if self.clinical_evidence { evidence = evidence + " " + self.clinical_evidence; }
 
+        profiles_draft: list[PayerProfile] = [root->:HasPayerProfile:->][?:PayerProfile];
+        payer_ctx_list = payer_profile_strings(patient_case.payer_name, profiles_draft);
+
         analysis: DenialAnalysis = DenialAnalysis(
             denial_type=denial.denial_type,
             criterion_failed=denial.criterion_failed,
@@ -172,7 +194,10 @@ walker:pub draft_appeal {
             drug_or_service=req.drug_name,
             diagnosis=req.diagnosis_codes[0] if req.diagnosis_codes else "",
             treatment_history=req.treatment_history,
-            clinical_evidence=evidence
+            clinical_evidence=evidence,
+            payer_name=patient_case.payer_name,
+            criteria_engine=payer_ctx_list[0],
+            appeal_language_notes=payer_ctx_list[1],
         ) by llm());
 
         appeal = AppealRecord(
@@ -282,11 +307,16 @@ walker:pub auto_process_case {
                 disengage;
             }
 
-            payer_name: str = patient_case.payer_name;
+            payer_name_an: str = patient_case.payer_name;
+
+            profiles_an: list[PayerProfile] = [root->:HasPayerProfile:->][?:PayerProfile];
+            payer_an_vals = payer_profile_strings(patient_case.payer_name, profiles_an);
 
             analysis = cast(DenialAnalysis, analyze_denial(
                 denial_text=self.denial_text,
-                payer_name=payer_name,
+                payer_name=payer_name_an,
+                payer_criteria_engine=payer_an_vals[0],
+                payer_appeal_notes=payer_an_vals[1],
                 cpt_code=req.cpt_code,
                 patient_diagnosis=req.diagnosis_codes[0] if req.diagnosis_codes else ""
             ) by llm());
@@ -343,6 +373,9 @@ walker:pub auto_process_case {
 
         evidence: str = req.treatment_history;
 
+        profiles_aut: list[PayerProfile] = [root->:HasPayerProfile:->][?:PayerProfile];
+        payer_auto_ctx = payer_profile_strings(patient_case.payer_name, profiles_aut);
+
         analysis_obj: DenialAnalysis = DenialAnalysis(
             denial_type=denial.denial_type,
             criterion_failed=denial.criterion_failed,
@@ -358,6 +391,9 @@ walker:pub auto_process_case {
             diagnosis=req.diagnosis_codes[0] if req.diagnosis_codes else "",
             treatment_history=req.treatment_history,
             clinical_evidence=evidence,
+            payer_name=patient_case.payer_name,
+            criteria_engine=payer_auto_ctx[0],
+            appeal_language_notes=payer_auto_ctx[1],
         ) by llm());
 
         if self.auto_submit_appeal {
@@ -406,6 +442,32 @@ walker:pub auto_process_case {
                 "subject_line": letter.subject_line,
                 "message": "Persist drafted appeal — ready for physician review",
             };
+        }
+
+        existing_patterns_auto = [root->:HasDenialPattern:->][?:DenialPattern];
+        matched_auto = False;
+        for pattern in existing_patterns_auto {
+            if (pattern.payer_name == patient_case.payer_name and
+                pattern.cpt_code == req.cpt_code and
+                pattern.denial_type == denial.denial_type) {
+                pattern.times_seen += 1;
+                pattern.win_rate = pattern.times_won / pattern.times_seen;
+                matched_auto = True;
+            }
+        }
+        if not matched_auto {
+            new_pat = DenialPattern(
+                pattern_id=str(uuid.uuid4()),
+                payer_name=patient_case.payer_name,
+                cpt_code=req.cpt_code,
+                denial_type=denial.denial_type,
+                criterion_failed=denial.criterion_failed,
+                successful_appeal_language="",
+                times_seen=1,
+                times_won=0,
+                win_rate=0.0,
+            );
+            root +>:HasDenialPattern:+> new_pat;
         }
     }
 }
@@ -672,6 +734,176 @@ walker:pub seed_demo_data {
                 {"name": "Patricia Williams", "status": "appeal_submitted"},
                 {"name": "Robert Martinez", "status": "denied", "viability": 0.95}
             ]
+        };
+    }
+}
+
+walker:pub seed_payer_intelligence {
+    can seed with Root entry {
+        existing_pp = [root->:HasPayerProfile:->][?:PayerProfile];
+        for p in existing_pp { del p; }
+
+        uhc = PayerProfile(
+            payer_id="UHC",
+            payer_name="UnitedHealthcare",
+            criteria_engine="InterQual",
+            avg_denial_rate=0.34,
+            avg_appeal_overturn_rate=0.81,
+            step_therapy_required=True,
+            expedited_timeline_hours=72,
+            standard_timeline_days=7,
+            appeal_language_notes="UHC responds to InterQual criterion citations. Always cite specific InterQual guideline version. Document step therapy with exact dates and DAS28-CRP or equivalent scores. Use clinical specialty society guidelines (ACR, ADA, ACC) as secondary support.",
+            common_denial_reasons=[
+                "Step therapy not completed",
+                "Medical necessity not established",
+                "Missing objective outcome measures",
+                "Inadequate duration of prior therapy",
+            ],
+        );
+        root +>:HasPayerProfile:+> uhc;
+
+        bcbs = PayerProfile(
+            payer_id="BCBS",
+            payer_name="Blue Cross Blue Shield",
+            criteria_engine="AIM",
+            avg_denial_rate=0.28,
+            avg_appeal_overturn_rate=0.79,
+            step_therapy_required=True,
+            expedited_timeline_hours=72,
+            standard_timeline_days=7,
+            appeal_language_notes="BCBS uses AIM Specialty Health criteria updated Q2 2025. AIM adds explicit prerequisite treatment duration minimums. Cite AIM criteria version. For imaging: document conservative treatment duration and functional limitation scores. P2P review has 69% overturn rate when conducted within 72 hours.",
+            common_denial_reasons=[
+                "Conservative treatment duration insufficient",
+                "Functional limitation not documented",
+                "Alternative imaging not attempted",
+                "Missing referring physician documentation",
+            ],
+        );
+        root +>:HasPayerProfile:+> bcbs;
+
+        aetna = PayerProfile(
+            payer_id="AET",
+            payer_name="Aetna",
+            criteria_engine="CPB",
+            avg_denial_rate=0.25,
+            avg_appeal_overturn_rate=0.77,
+            step_therapy_required=True,
+            expedited_timeline_hours=72,
+            standard_timeline_days=7,
+            appeal_language_notes="Aetna uses proprietary Clinical Policy Bulletins referenced by number in denial letters. Always cite the specific CPB number from the denial. Document why patient cannot use preferred alternatives. GLP-1 agonists require HbA1c above 7.5 and failure of metformin.",
+            common_denial_reasons=[
+                "CPB criteria not met",
+                "Preferred alternative not tried",
+                "HbA1c threshold not documented",
+                "Missing endocrinologist consultation",
+            ],
+        );
+        root +>:HasPayerProfile:+> aetna;
+
+        cigna = PayerProfile(
+            payer_id="CIG",
+            payer_name="Cigna",
+            criteria_engine="proprietary",
+            avg_denial_rate=0.22,
+            avg_appeal_overturn_rate=0.83,
+            step_therapy_required=False,
+            expedited_timeline_hours=72,
+            standard_timeline_days=7,
+            appeal_language_notes="Cigna administrative denials are easiest to overturn — 95% success with correct documentation. Always include operative reports and discharge summaries. For cardiac rehab: CABG operative report is mandatory. Missing documents are the most common Cigna denial reason.",
+            common_denial_reasons=[
+                "Missing operative report",
+                "Missing discharge summary",
+                "Qualifying event not documented",
+                "Referral letter missing",
+            ],
+        );
+        root +>:HasPayerProfile:+> cigna;
+
+        report {
+            "message": "Payer intelligence seeded — 4 payer profiles created",
+            "payers": [
+                "UnitedHealthcare",
+                "Blue Cross Blue Shield",
+                "Aetna",
+                "Cigna",
+            ],
+        };
+    }
+}
+
+walker:pub get_payer_profile {
+    has payer_name: str;
+
+    can fetch with Root entry {
+        profiles = [root->:HasPayerProfile:->][?:PayerProfile];
+        for p in profiles {
+            if p.payer_name == self.payer_name {
+                report {
+                    "payer_id": p.payer_id,
+                    "payer_name": p.payer_name,
+                    "criteria_engine": p.criteria_engine,
+                    "avg_denial_rate": p.avg_denial_rate,
+                    "avg_appeal_overturn_rate": p.avg_appeal_overturn_rate,
+                    "step_therapy_required": p.step_therapy_required,
+                    "standard_timeline_days": p.standard_timeline_days,
+                    "appeal_language_notes": p.appeal_language_notes,
+                    "common_denial_reasons": p.common_denial_reasons,
+                };
+                disengage;
+            }
+        }
+        report {"error": "Payer profile not found for: " + self.payer_name};
+    }
+}
+
+walker:pub record_denial_pattern {
+    has payer_name: str;
+    has cpt_code: str;
+    has denial_type: str;
+    has criterion_failed: str;
+    has appeal_won: bool = False;
+    has successful_language: str = "";
+
+    can record with Root entry {
+        existing_patterns = [root->:HasDenialPattern:->][?:DenialPattern];
+        for pattern in existing_patterns {
+            if (pattern.payer_name == self.payer_name and
+                pattern.cpt_code == self.cpt_code and
+                pattern.denial_type == self.denial_type) {
+                pattern.times_seen += 1;
+                if self.appeal_won {
+                    pattern.times_won += 1;
+                    if self.successful_language {
+                        pattern.successful_appeal_language = self.successful_language;
+                    }
+                }
+                pattern.win_rate = pattern.times_won / pattern.times_seen;
+                report {
+                    "pattern_id": jid(pattern),
+                    "times_seen": pattern.times_seen,
+                    "win_rate": pattern.win_rate,
+                    "updated": True,
+                };
+                disengage;
+            }
+        }
+        new_pattern = DenialPattern(
+            pattern_id=str(uuid.uuid4()),
+            payer_name=self.payer_name,
+            cpt_code=self.cpt_code,
+            denial_type=self.denial_type,
+            criterion_failed=self.criterion_failed,
+            successful_appeal_language=self.successful_language,
+            times_seen=1,
+            times_won=1 if self.appeal_won else 0,
+            win_rate=1.0 if self.appeal_won else 0.0,
+        );
+        root +>:HasDenialPattern:+> new_pattern;
+        report {
+            "pattern_id": jid(new_pattern),
+            "times_seen": 1,
+            "win_rate": new_pattern.win_rate,
+            "created": True,
         };
     }
 }
