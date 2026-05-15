@@ -52,10 +52,16 @@ node AppealRecord {
 node MonitorStatus {
     has last_checked: str;
     has days_pending: int = 0;
+    has hours_pending: float = 0.0;
     has cms_deadline_72hr: bool = False;
     has cms_deadline_7day: bool = False;
     has follow_up_required: bool = False;
     has payer_response_received: bool = False;
+    has is_expedited: bool = False;
+    has submitted_at: str = "";
+    has escalation_triggered: bool = False;
+    has escalation_reason: str = "";
+    has escalation_timestamp: str = "";
 }
 
 node PayerProfile {

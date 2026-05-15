@@ -1,6 +1,7 @@
 import { AgentStep as AgentStepRow } from "@/components/AgentStep";
 import { AppHeader } from "@/components/AppHeader";
 import { StatusBadge } from "@/components/StatusBadge";
+import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
@@ -18,6 +19,7 @@ import {
   Building2,
   CheckCircle2,
   ChevronLeft,
+  Clock,
   Copy,
   Loader2,
   Zap,
@@ -163,6 +165,7 @@ export function CaseDetail() {
     number | null
   >(null);
   const [appealActionBusy, setAppealActionBusy] = useState(false);
+  const [markExpeditedBusy, setMarkExpeditedBusy] = useState(false);
   const [agentStreamKey, setAgentStreamKey] = useState(0);
 
   const loadCase = useCallback(async () => {
@@ -384,6 +387,28 @@ export function CaseDetail() {
     });
   }, [caseData?.appeal?.full_letter]);
 
+  const handleMarkExpedited = useCallback(async () => {
+    if (!caseId) {
+      return;
+    }
+    setMarkExpeditedBusy(true);
+    try {
+      const res = await api.markExpedited(caseId, true);
+      if (res.error) {
+        toast.error(res.error, { duration: 4000 });
+        return;
+      }
+      toast.success(res.message ?? "Marked as expedited", { duration: 3000 });
+      await loadCase();
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : "Failed to update expedited flag";
+      toast.error(`Something went wrong — ${msg}`, { duration: 5000 });
+    } finally {
+      setMarkExpeditedBusy(false);
+    }
+  }, [caseId, loadCase]);
+
   const showDetail = Boolean(caseData) && minLoadDone;
   const showError = Boolean(caseLoadError) && minLoadDone && !caseData;
   const showSkeleton = !showDetail && !showError;
@@ -495,6 +520,28 @@ export function CaseDetail() {
                       Submitted:{" "}
                       {formatRelativeTime(caseData.submitted_at)}
                     </p>
+                    {caseData.monitor?.is_expedited ? (
+                      <Badge
+                        variant="outline"
+                        className="mt-3 border-amber-200 bg-amber-50 font-medium text-amber-800"
+                      >
+                        Expedited · 72h CMS
+                      </Badge>
+                    ) : null}
+                    {(caseData.status === "submitted" ||
+                      caseData.status === "pending") &&
+                    caseData.monitor &&
+                    !caseData.monitor.is_expedited ? (
+                      <button
+                        type="button"
+                        disabled={markExpeditedBusy}
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                        onClick={() => void handleMarkExpedited()}
+                      >
+                        <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        Mark as Expedited (72-hr deadline)
+                      </button>
+                    ) : null}
                     {caseData.status === "approved" && caseData.preauth_ref ? (
                       <p className="mt-2 font-mono text-sm text-green-700">
                         Pre-auth ref: {caseData.preauth_ref}

@@ -681,6 +681,22 @@ walker:pub get_case_detail {
             }
         }
 
+        monitors_detail: list[MonitorStatus] = [req->:HasMonitor:->][?:MonitorStatus];
+        monitor_data: dict | None = None;
+        if monitors_detail {
+            m_det: MonitorStatus = monitors_detail[0];
+            monitor_data = {
+                "is_expedited": m_det.is_expedited,
+                "escalation_triggered": m_det.escalation_triggered,
+                "cms_deadline_72hr": m_det.cms_deadline_72hr,
+                "cms_deadline_7day": m_det.cms_deadline_7day,
+                "follow_up_required": m_det.follow_up_required,
+                "hours_pending": m_det.hours_pending,
+                "days_pending": m_det.days_pending,
+                "escalation_reason": m_det.escalation_reason,
+            };
+        }
+
         report {
             "case_id": jid(patient_case),
             "patient_name": patient_case.patient_name,
@@ -697,6 +713,7 @@ walker:pub get_case_detail {
             "submitted_at": req.submitted_at,
             "preauth_ref": req.preauth_ref,
             "priority": req.priority,
+            "monitor": monitor_data,
             "denial": denial_data,
             "appeal": appeal_data
         };
@@ -1017,6 +1034,236 @@ walker:pub record_denial_pattern {
             "times_seen": 1,
             "win_rate": new_pattern.win_rate,
             "created": True,
+        };
+    }
+}
+
+walker:pub check_cms_deadlines {
+    can sweep with Root entry {
+        now = datetime.now();
+        now_str = now.isoformat();
+        violations: list[dict] = [];
+        escalated: list[dict] = [];
+        all_cases: list[PatientCase] = [root-->][?:PatientCase];
+
+        for patient_case in all_cases {
+            requests: list[PARequest] = [patient_case->:HasRequest:->][?:PARequest];
+            if not requests { continue; }
+            req: PARequest = requests[0];
+
+            if not (req.status == "submitted" or req.status == "pending") { continue; }
+
+            monitors: list[MonitorStatus] = [req->:HasMonitor:->][?:MonitorStatus];
+            if not monitors { continue; }
+            monitor: MonitorStatus = monitors[0];
+
+            sub_s = req.submitted_at;
+            if not sub_s or len(sub_s) < 10 { continue; }
+
+            submitted = datetime.fromisoformat(sub_s);
+            delta = now - submitted;
+            hours_pending: float = delta.total_seconds() / 3600.0;
+            days_pending: int = delta.days;
+
+            monitor.hours_pending = hours_pending;
+            monitor.days_pending = days_pending;
+            monitor.last_checked = now_str;
+
+            breach_expedited = monitor.is_expedited and hours_pending > 72.0;
+            breach_standard = (not monitor.is_expedited) and days_pending > 7;
+            warn_expedited = (
+                monitor.is_expedited and hours_pending > 48.0 and hours_pending <= 72.0
+            );
+            warn_standard = (
+                (not monitor.is_expedited) and days_pending > 5 and days_pending <= 7
+            );
+
+            if breach_expedited {
+                monitor.cms_deadline_72hr = True;
+                monitor.follow_up_required = True;
+                if not monitor.escalation_triggered {
+                    monitor.escalation_triggered = True;
+                    monitor.escalation_reason = (
+                        "CMS-0057-F expedited deadline exceeded: payer did not respond within 72 hours as required by federal law"
+                    );
+                    monitor.escalation_timestamp = now_str;
+                    escalated.append({
+                        "case_id": jid(patient_case),
+                        "patient_name": patient_case.patient_name,
+                        "payer_name": patient_case.payer_name,
+                        "hours_pending": hours_pending,
+                        "violation_type": "expedited_72hr",
+                        "escalation_reason": monitor.escalation_reason,
+                    });
+                }
+                violations.append({
+                    "case_id": jid(patient_case),
+                    "patient_name": patient_case.patient_name,
+                    "payer": patient_case.payer_name,
+                    "hours_pending": hours_pending,
+                    "violation": "expedited_72hr_exceeded",
+                    "cms_rule": "CMS-0057-F",
+                });
+            } elif breach_standard {
+                monitor.cms_deadline_7day = True;
+                monitor.follow_up_required = True;
+                if not monitor.escalation_triggered {
+                    monitor.escalation_triggered = True;
+                    monitor.escalation_reason = (
+                        "CMS-0057-F standard deadline exceeded: payer did not respond within 7 calendar days as required by federal law"
+                    );
+                    monitor.escalation_timestamp = now_str;
+                    escalated.append({
+                        "case_id": jid(patient_case),
+                        "patient_name": patient_case.patient_name,
+                        "payer_name": patient_case.payer_name,
+                        "days_pending": days_pending,
+                        "violation_type": "standard_7day",
+                        "escalation_reason": monitor.escalation_reason,
+                    });
+                }
+                violations.append({
+                    "case_id": jid(patient_case),
+                    "patient_name": patient_case.patient_name,
+                    "payer": patient_case.payer_name,
+                    "days_pending": days_pending,
+                    "violation": "standard_7day_exceeded",
+                    "cms_rule": "CMS-0057-F",
+                });
+            } elif warn_expedited {
+                monitor.follow_up_required = True;
+                violations.append({
+                    "case_id": jid(patient_case),
+                    "patient_name": patient_case.patient_name,
+                    "payer": patient_case.payer_name,
+                    "hours_remaining": 72.0 - hours_pending,
+                    "violation": "expedited_deadline_warning",
+                    "cms_rule": "CMS-0057-F",
+                });
+            } elif warn_standard {
+                monitor.follow_up_required = True;
+                violations.append({
+                    "case_id": jid(patient_case),
+                    "patient_name": patient_case.patient_name,
+                    "payer": patient_case.payer_name,
+                    "days_remaining": 7 - days_pending,
+                    "violation": "standard_deadline_warning",
+                    "cms_rule": "CMS-0057-F",
+                });
+            }
+        }
+
+        report {
+            "checked_at": now_str,
+            "total_violations": len(violations),
+            "total_escalated": len(escalated),
+            "violations": violations,
+            "escalated_cases": escalated,
+            "cms_rule": "CMS-0057-F",
+            "message": (
+                "Checked " + str(len(all_cases)) + " cases — " +
+                str(len(violations)) + " CMS deadline issues found"
+            ),
+        };
+    }
+}
+
+walker:pub get_monitoring_dashboard {
+    can fetch_dash with Root entry {
+        pending_cases: list[dict] = [];
+        violation_cases: list[dict] = [];
+        approaching_cases: list[dict] = [];
+
+        all_cases: list[PatientCase] = [root-->][?:PatientCase];
+
+        for patient_case in all_cases {
+            requests: list[PARequest] = [patient_case->:HasRequest:->][?:PARequest];
+            if not requests { continue; }
+            req: PARequest = requests[0];
+
+            if not (req.status == "submitted" or req.status == "pending") { continue; }
+
+            monitors: list[MonitorStatus] = [req->:HasMonitor:->][?:MonitorStatus];
+            monitor: MonitorStatus | None = monitors[0] if monitors else None;
+
+            mdays = monitor.days_pending if monitor else 0;
+            mhours = monitor.hours_pending if monitor else 0.0;
+            mis_exp = monitor.is_expedited if monitor else False;
+            mvio = False;
+            if monitor {
+                mvio = monitor.cms_deadline_72hr or monitor.cms_deadline_7day;
+            }
+            mesc = monitor.escalation_triggered if monitor else False;
+            mfoll = monitor.follow_up_required if monitor else False;
+            mreason = monitor.escalation_reason if monitor else "";
+
+            case_data: dict = {
+                "case_id": jid(patient_case),
+                "patient_name": patient_case.patient_name,
+                "payer_name": patient_case.payer_name,
+                "drug_name": req.drug_name,
+                "submitted_at": req.submitted_at,
+                "days_pending": mdays,
+                "hours_pending": mhours,
+                "is_expedited": mis_exp,
+                "cms_deadline_violated": mvio,
+                "escalation_triggered": mesc,
+                "follow_up_required": mfoll,
+                "escalation_reason": mreason,
+            };
+
+            if monitor and (monitor.cms_deadline_72hr or monitor.cms_deadline_7day) {
+                violation_cases.append(case_data);
+            } elif monitor and monitor.follow_up_required {
+                approaching_cases.append(case_data);
+            } else {
+                pending_cases.append(case_data);
+            }
+        }
+
+        report {
+            "pending_cases": pending_cases,
+            "violation_cases": violation_cases,
+            "approaching_deadline": approaching_cases,
+            "total_pending": len(pending_cases) + len(violation_cases) + len(approaching_cases),
+            "total_violations": len(violation_cases),
+            "cms_rule": "CMS-0057-F",
+        };
+    }
+}
+
+walker:pub mark_expedited {
+    has case_id: str;
+    has is_expedited: bool = True;
+
+    can update_marker with Root entry {
+        patient_case = cast(PatientCase, &self.case_id);
+        requests: list[PARequest] = [patient_case->:HasRequest:->][?:PARequest];
+        if not requests {
+            report {"error": "Case not found"};
+            disengage;
+        }
+        req: PARequest = requests[0];
+
+        monitors: list[MonitorStatus] = [req->:HasMonitor:->][?:MonitorStatus];
+        if not monitors {
+            report {"error": "Monitor not found"};
+            disengage;
+        }
+        monitor: MonitorStatus = monitors[0];
+        monitor.is_expedited = self.is_expedited;
+        monitor.submitted_at = req.submitted_at;
+        monitor.last_checked = datetime.now().isoformat();
+
+        deadline_h = 72 if self.is_expedited else 168;
+        exp_msg = "Case marked as expedited — 72-hour CMS deadline now applies";
+        std_msg = "Case marked as standard — 7-day CMS deadline applies";
+        out_msg = exp_msg if self.is_expedited else std_msg;
+        report {
+            "case_id": self.case_id,
+            "is_expedited": self.is_expedited,
+            "deadline_hours": deadline_h,
+            "message": out_msg,
         };
     }
 }

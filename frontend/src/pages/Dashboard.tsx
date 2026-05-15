@@ -5,9 +5,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useCountUp } from "@/hooks/useCountUp";
 import { api } from "@/lib/api";
 import { formatRelativeTime } from "@/lib/formatRelativeTime";
-import type { PACase, PAStatus } from "@/lib/types";
+import type { CMSDeadlineCheckReport, PACase, PAStatus } from "@/lib/types";
 import {
   Activity,
+  AlertCircle,
   CheckCircle2,
   Clock,
   FileText,
@@ -176,15 +177,28 @@ export function Dashboard() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [autoRunningIds, setAutoRunningIds] = useState<string[]>([]);
   const autoQueuedRef = useRef<Set<string>>(new Set());
+  const [cmsDeadline, setCmsDeadline] = useState<CMSDeadlineCheckReport | null>(
+    null
+  );
+
+  const refreshCmsDeadlines = useCallback(async () => {
+    try {
+      const r = await api.checkCMSDeadlines();
+      setCmsDeadline(r);
+    } catch {
+      setCmsDeadline(null);
+    }
+  }, []);
 
   const refreshCasesQuiet = useCallback(async () => {
     try {
       const data = await api.getAllCases();
       setCases(data.map(normalizeCase));
+      await refreshCmsDeadlines();
     } catch {
       /* silent background refresh only */
     }
-  }, []);
+  }, [refreshCmsDeadlines]);
 
   const scheduleDeniedAutoProcess = useCallback(
     (list: PACase[]) => {
@@ -234,6 +248,7 @@ export function Dashboard() {
       const normalized = data.map(normalizeCase);
       setCases(normalized);
       scheduleDeniedAutoProcess(normalized);
+      await refreshCmsDeadlines();
     } catch (e) {
       const message =
         e instanceof Error ? e.message : "Could not reach the server to load cases.";
@@ -241,10 +256,11 @@ export function Dashboard() {
         duration: 5000,
       });
       setCases([]);
+      setCmsDeadline(null);
     } finally {
       setLoading(false);
     }
-  }, [scheduleDeniedAutoProcess]);
+  }, [scheduleDeniedAutoProcess, refreshCmsDeadlines]);
 
   useEffect(() => {
     void loadCases();
@@ -328,6 +344,30 @@ export function Dashboard() {
             </div>
           )}
 
+          {!loading &&
+            cases.length > 0 &&
+            cmsDeadline &&
+            cmsDeadline.total_escalated > 0 && (
+              <div
+                className="mb-4 flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-4"
+                role="alert"
+              >
+                <AlertCircle
+                  className="h-5 w-5 shrink-0 text-red-500"
+                  aria-hidden
+                />
+                <div>
+                  <p className="text-sm font-medium text-red-800">
+                    CMS-0057-F Violation: {cmsDeadline.total_escalated} payer(s)
+                    have exceeded mandatory response deadlines
+                  </p>
+                  <p className="mt-1 text-sm text-red-700">
+                    Persist has automatically escalated these cases
+                  </p>
+                </div>
+              </div>
+            )}
+
           {loading && (
             <div className="mb-8 grid grid-cols-4 gap-4">
               {Array.from({ length: 4 }).map((_, i) => (
@@ -367,7 +407,9 @@ export function Dashboard() {
               <div className="mb-2 flex justify-end">
                 <button
                   type="button"
-                  onClick={() => void loadCases()}
+                  onClick={() => {
+                    void loadCases();
+                  }}
                   disabled={loading}
                   className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                   aria-label="Refresh queue"
