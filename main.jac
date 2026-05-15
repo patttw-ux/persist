@@ -10,7 +10,8 @@ import from abilities {
 }
 import from walkers {
     submit_pa, parse_denial, draft_appeal, submit_appeal,
-    get_all_cases, get_case_detail, seed_demo_data
+    get_all_cases, get_case_detail, seed_demo_data,
+    agent_status_stream
 }
 
 with entry {
