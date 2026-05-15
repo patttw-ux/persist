@@ -30,9 +30,18 @@ import {
   Send,
   Shield,
   Trophy,
+  Upload,
   Zap,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+} from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -495,6 +504,12 @@ export function CaseDetail() {
   const [appealActionBusy, setAppealActionBusy] = useState(false);
   const [markExpeditedBusy, setMarkExpeditedBusy] = useState(false);
   const [agentStreamKey, setAgentStreamKey] = useState(0);
+  const [pdfUploading, setPdfUploading] = useState(false);
+  const [extractedText, setExtractedText] = useState("");
+  const [showManualPaste, setShowManualPaste] = useState(false);
+  const [manualDenialText, setManualDenialText] = useState("");
+  const [pdfReadError, setPdfReadError] = useState<string | null>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   const loadCase = useCallback(async () => {
     if (!caseId) {
@@ -737,6 +752,126 @@ export function CaseDetail() {
     }
   }, [caseId, loadCase]);
 
+  const ingestPdfFile = useCallback((file: File) => {
+    setPdfReadError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const raw =
+        typeof reader.result === "string" ? reader.result : "";
+      const trimmed = raw.trim();
+      if (!trimmed) {
+        const msg =
+          "Could not extract text from PDF. Please paste the denial text manually.";
+        setPdfReadError(msg);
+        setExtractedText("");
+        toast.error(msg, { duration: 6000 });
+        return;
+      }
+      setExtractedText(raw);
+    };
+    reader.onerror = () => {
+      const msg =
+        "Could not extract text from PDF. Please paste the denial text manually.";
+      setPdfReadError(msg);
+      setExtractedText("");
+      toast.error(msg, { duration: 6000 });
+    };
+    reader.readAsText(file);
+  }, []);
+
+  const handlePdfInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      if (!file) {
+        return;
+      }
+      if (!file.name.toLowerCase().endsWith(".pdf")) {
+        toast.error("Please choose a PDF file.", { duration: 4000 });
+        return;
+      }
+      ingestPdfFile(file);
+    },
+    [ingestPdfFile]
+  );
+
+  const handlePdfDrop = useCallback(
+    (e: DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      const file = e.dataTransfer.files?.[0];
+      if (!file) {
+        return;
+      }
+      if (!file.name.toLowerCase().endsWith(".pdf")) {
+        toast.error("Please drop a PDF file.", { duration: 4000 });
+        return;
+      }
+      ingestPdfFile(file);
+    },
+    [ingestPdfFile]
+  );
+
+  const handleProcessDenialPdf = useCallback(async () => {
+    if (!caseId) {
+      return;
+    }
+    const textToSend = showManualPaste
+      ? manualDenialText.trim()
+      : extractedText.trim();
+    if (!textToSend) {
+      toast.error("Add denial text from a PDF or paste it manually.", {
+        duration: 4000,
+      });
+      return;
+    }
+
+    setPdfUploading(true);
+    try {
+      const res = await api.processDenialPDF({
+        case_id: caseId,
+        pdf_text: textToSend,
+        auto_submit_appeal: true,
+      });
+
+      if (typeof res.error === "string") {
+        toast.error(res.error, { duration: 5000 });
+        return;
+      }
+
+      await loadCase();
+
+      if (res.step === "appeal_submitted") {
+        toast.success(
+          "Denial letter processed — Persist is fighting this denial",
+          { duration: 4000 }
+        );
+      } else {
+        toast.success(
+          "Denial letter processed — Persist analyzed this denial",
+          { duration: 4000 }
+        );
+      }
+      setExtractedText("");
+      setManualDenialText("");
+      setShowManualPaste(false);
+      setPdfReadError(null);
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : "Failed to process denial letter";
+      toast.error(`Something went wrong — ${msg}`, {
+        duration: 5000,
+      });
+    } finally {
+      setPdfUploading(false);
+    }
+  }, [
+    caseId,
+    extractedText,
+    loadCase,
+    manualDenialText,
+    showManualPaste,
+  ]);
+
   const showDetail = Boolean(caseData) && minLoadDone;
   const showError = Boolean(caseLoadError) && minLoadDone && !caseData;
   const showSkeleton = !showDetail && !showError;
@@ -876,6 +1011,111 @@ export function CaseDetail() {
                       </p>
                     ) : null}
                   </section>
+
+                  {!caseData.denial &&
+                  (caseData.status === "submitted" ||
+                    caseData.status === "pending") ? (
+                    <div className="mb-4 rounded-xl border-2 border-dashed border-blue-200 bg-blue-50 p-6">
+                      <input
+                        ref={pdfInputRef}
+                        type="file"
+                        accept=".pdf"
+                        className="hidden"
+                        onChange={handlePdfInputChange}
+                      />
+                      <div className="mb-4 flex items-start gap-2">
+                        <Upload
+                          className="mt-0.5 h-5 w-5 shrink-0 text-blue-600"
+                          aria-hidden
+                        />
+                        <div>
+                          <p className="text-sm font-semibold text-blue-800">
+                            Upload Denial Letter
+                          </p>
+                          <p className="mt-0.5 text-xs text-blue-600">
+                            When payer denies, upload the denial letter PDF
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="flex w-full cursor-pointer flex-col items-center rounded-lg bg-white/60 px-4 py-6 text-center transition hover:bg-white/90"
+                        onClick={() => pdfInputRef.current?.click()}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => void handlePdfDrop(e)}
+                      >
+                        <FileText
+                          className="mx-auto mb-2 h-8 w-8 text-blue-300"
+                          aria-hidden
+                        />
+                        <p className="text-sm text-blue-600">
+                          Drop PDF here or click to upload
+                        </p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          Persist will automatically parse, score, and fight the
+                          denial
+                        </p>
+                      </button>
+
+                      {pdfReadError ? (
+                        <p className="mt-3 text-xs text-red-600">
+                          {pdfReadError}
+                        </p>
+                      ) : null}
+
+                      {!showManualPaste &&
+                      extractedText.trim().length > 0 ? (
+                        <p className="mt-4 rounded-md border border-amber-100 bg-white/70 p-3 font-mono text-xs leading-relaxed text-slate-700">
+                          {extractedText.trim().length > 200
+                            ? `${extractedText.trim().slice(0, 200)}...`
+                            : extractedText.trim()}
+                        </p>
+                      ) : null}
+
+                      <button
+                        type="button"
+                        className="mt-3 w-full text-center text-xs text-amber-700 underline-offset-2 hover:underline"
+                        onClick={() => setShowManualPaste((v) => !v)}
+                      >
+                        Or paste denial text manually
+                      </button>
+
+                      {showManualPaste ? (
+                        <textarea
+                          value={manualDenialText}
+                          onChange={(e) =>
+                            setManualDenialText(e.target.value)
+                          }
+                          rows={6}
+                          placeholder="Paste full denial letter text…"
+                          className="mt-4 w-full resize-y rounded-md border border-blue-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus-visible:border-amber-400 focus-visible:ring-2 focus-visible:ring-amber-200 focus-visible:outline-none"
+                        />
+                      ) : null}
+
+                      <button
+                        type="button"
+                        disabled={
+                          pdfUploading ||
+                          !(showManualPaste
+                            ? manualDenialText.trim()
+                            : extractedText.trim())
+                        }
+                        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:pointer-events-none disabled:opacity-50"
+                        onClick={() => void handleProcessDenialPdf()}
+                      >
+                        {pdfUploading ? (
+                          <Loader2
+                            className="h-4 w-4 animate-spin shrink-0"
+                            aria-hidden
+                          />
+                        ) : (
+                          <Zap className="h-4 w-4 shrink-0" aria-hidden />
+                        )}
+                        Process with Persist Agent
+                      </button>
+                    </div>
+                  ) : null}
 
                   {caseData.denial ? (
                     <section className="mb-4 rounded-lg border-l-4 border-red-400 bg-red-50/30 p-6">

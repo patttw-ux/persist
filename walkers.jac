@@ -366,6 +366,114 @@ walker:pub submit_appeal {
     }
 }
 
+walker:pub process_denial_pdf {
+    has case_id: str;
+    has pdf_text: str;
+    has denial_date: str = "";
+    has auto_submit_appeal: bool = True;
+
+    can process with Root entry {
+        now: str = datetime.now().isoformat();
+        date_val: str = self.denial_date if self.denial_date else now[:10];
+
+        patient_case = cast(PatientCase, &self.case_id);
+        requests: list[PARequest] = [patient_case->:HasRequest:->][?:PARequest];
+        if not requests {
+            report {"error": "No PA request found"};
+            disengage;
+        }
+        req: PARequest = requests[0];
+
+        existing_denials: list[DenialRecord] = [req->:HasDenial:->][?:DenialRecord];
+        if existing_denials {
+            report {"error": "Denial already processed for this case"};
+            disengage;
+        }
+
+        payer_name: str = patient_case.payer_name;
+        analysis = cast(DenialAnalysis, analyze_denial(denial_text=self.pdf_text, payer_name=payer_name, cpt_code=req.cpt_code, patient_diagnosis=req.diagnosis_codes[0] if req.diagnosis_codes else ""
+        ));
+
+        denial_type: str = analysis.denial_type;
+        base_score: float = 0.05;
+        if denial_type == "medical_necessity" {
+            base_score = 0.82;
+        } elif denial_type == "step_therapy" {
+            base_score = 0.78;
+        } elif denial_type == "administrative" {
+            base_score = 0.95;
+        }
+
+        final_score: float = base_score;
+        is_viable: bool = final_score > 0.5;
+
+        denial = DenialRecord(
+            denial_id=str(uuid.uuid4()),
+            raw_denial_text=self.pdf_text,
+            denial_type=analysis.denial_type,
+            criterion_failed=analysis.criterion_failed,
+            missing_documentation=analysis.missing_documentation,
+            appeal_strategy=analysis.appeal_strategy,
+            denial_reason_summary=analysis.denial_reason_summary,
+            appeal_viability_score=final_score,
+            appeal_viable=is_viable,
+            denial_date=date_val,
+        );
+        req +>:HasDenial:+> denial;
+        req.status = "denied";
+
+        if not is_viable or not self.auto_submit_appeal {
+            report {
+                "step": "denial_parsed",
+                "denial_type": analysis.denial_type,
+                "criterion_failed": analysis.criterion_failed,
+                "appeal_viable": is_viable,
+                "viability_score": final_score,
+                "message": "PDF processed — denial parsed successfully",
+            };
+            disengage;
+        }
+
+        evidence: str = req.treatment_history;
+        analysis_obj: DenialAnalysis = DenialAnalysis(
+            denial_type=denial.denial_type,
+            criterion_failed=denial.criterion_failed,
+            missing_documentation=denial.missing_documentation,
+            appeal_strategy=denial.appeal_strategy,
+            denial_reason_summary=denial.denial_reason_summary,
+        );
+
+        letter = cast(AppealLetter, draft_appeal_letter(denial_analysis=analysis_obj, patient_name=patient_case.patient_name, drug_or_service=req.drug_name, diagnosis=req.diagnosis_codes[0] if req.diagnosis_codes else "", treatment_history=req.treatment_history, clinical_evidence=evidence
+        ));
+
+        appeal = AppealRecord(
+            appeal_id=str(uuid.uuid4()),
+            subject_line=letter.subject_line,
+            opening_paragraph=letter.opening_paragraph,
+            clinical_justification=letter.clinical_justification,
+            evidence_cited=letter.evidence_cited,
+            closing_paragraph=letter.closing_paragraph,
+            full_letter=letter.full_letter,
+            appeal_type=denial.denial_type,
+            status="submitted",
+            submitted_at=now,
+            filed_at=now,
+        );
+        denial +>:HasAppeal:+> appeal;
+        req.status = "appeal_submitted";
+
+        report {
+            "step": "appeal_submitted",
+            "denial_type": analysis.denial_type,
+            "criterion_failed": analysis.criterion_failed,
+            "appeal_viable": is_viable,
+            "viability_score": final_score,
+            "appeal_id": jid(appeal),
+            "message": "Persist autonomously drafted and submitted appeal from PDF",
+        };
+    }
+}
+
 walker:pub auto_process_case {
     has case_id: str;
     has denial_text: str = "";
