@@ -1,0 +1,14 @@
+[project]
+name = "persist"
+version = "0.1.0"
+entry = "main.jac"
+
+[plugins.byllm.model]
+default_model = "claude-sonnet-4-20250514"
+temperature = 0.0
+max_tokens = 2000
+prompt_caching = true
+
+[server]
+port = 8000
+

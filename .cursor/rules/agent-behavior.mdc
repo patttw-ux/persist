@@ -1,0 +1,16 @@
+---
+type: agent
+---
+Before starting any task:
+1. State your plan in 3-5 bullet points
+2. List exactly which files you will create or modify
+3. If scope is unclear, ask ONE clarifying question before proceeding
+
+After completing:
+- Summarize what changed and why
+- List any follow-up tasks created
+- Do NOT commit or push
+- Do NOT modify files outside listed scope
+- Do NOT add features not in the task spec
+
+---

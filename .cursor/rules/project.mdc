@@ -1,0 +1,94 @@
+---
+description: Persist project conventions — always applied
+type: always
+---
+
+## Stack
+- Backend: Jac language. ALL agent logic in .jac files.
+- Frontend: React + Vite + TypeScript + Tailwind CSS v4 + shadcn/ui
+- LLM: Claude via byLLM (import:py from byllm.lib { Model })
+- Real-time: WebSocket walker for agent step streaming
+- No auth, no login, single demo user
+
+## Critical Jac Syntax Rules
+- Semicolons REQUIRED at end of every statement
+- `has` for field declarations (never __init__)
+- `can` for walker abilities with entry/exit triggers ONLY
+- `def` for utility methods not tied to graph traversal
+- `here` = current node being visited
+- `self` = walker instance
+- NEVER use `let` keyword (removed from Jac)
+- NEVER use `check` keyword (removed from Jac)
+- `++>` creates a new directed edge AND connects in one step
+- `-->` traverses an EXISTING edge (does NOT create)
+- `+>:EdgeType:+>` creates a typed directed edge
+- `->:EdgeType:->` traverses a typed edge
+- `[root-->][?:NodeType]` filters by node type
+- `[root-->][?:NodeType, field == value]` filters by type + field
+- `&jid_string` dereferences a JID back to a node object
+- `jid(node)` returns the unique string ID of a node
+- All nodes connected to root via ++> are auto-persisted
+- `:pub` walkers become POST /walker/<WalkerName> endpoints
+- byLLM: `result = ability() by llm()` NOT `method="ReAct"`
+- Tools activate ReAct automatically: `by llm(tools=[...])`
+- NEVER use method="ReAct" — it is deprecated and broken
+
+## jac-scale Response Envelope (CRITICAL)
+The actual response format is:
+{ "status": 200, "reports": [...] }
+NOT { "ok": true, "data": { "reports": [...] } }
+Frontend reads: response.reports[0] NOT response.data.reports[0]
+
+## Edge Syntax (UPDATED 2025)
+# Create typed edge:
+node_a +>:EdgeType:+> node_b;
+# Traverse typed edge:
+results = [here->:EdgeType:->][?:NodeType];
+# Create untyped edge:
+root ++> new_node;
+# Traverse untyped:
+all = [root-->][?:NodeType];
+
+## CORS
+jac-scale default mode allows ALL origins automatically.
+No CORS configuration needed. Use Vite proxy for clean URLs.
+
+## File Structure
+persist/
+  main.jac
+  models.jac
+  walkers.jac
+  abilities.jac
+  jac.toml
+  frontend/
+    src/
+      components/
+      pages/
+      lib/
+        api.ts
+        types.ts
+        websocket.ts
+
+## Frontend Conventions
+- Inter font, Slate neutral palette (#F8FAFC background)
+- shadcn/ui components only
+- Status colors: green=approved, amber=pending, red=denied, blue=in-progress
+- NEVER use red for decorative elements
+- font-mono for ALL medical codes (CPT, ICD-10, NDC, PA ref numbers)
+- 4px spacing grid — all padding/margin multiples of 4
+- text-sm (14px) default body text for clinical data density
+- Lucide React for icons only
+- Empty states: informative not playful
+- Error messages: specific not generic
+
+## DO NOT
+- Do not modify files outside current task scope
+- Do not add dependencies not listed in the task
+- Do not use `any` TypeScript type
+- Do not add auth or login screens
+- Do not put agent logic in React components
+- Do not use method="ReAct" in byLLM calls
+- Do not use `let` or `check` keywords in Jac
+- Do not use `-->` to connect a new node (use `++>`)
+- Keep all Jac files under 500 lines
+
