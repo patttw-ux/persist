@@ -3,11 +3,17 @@ import from models {
     HasRequest, HasDenial, HasAppeal, HasMonitor
 }
 import from abilities {
-    DenialAnalysis, analyze_denial, draft_appeal_letter, score_appeal_viability
+    DenialAnalysis, AppealLetter, analyze_denial, draft_appeal_letter,
+    score_appeal_viability
 }
 import from datetime { datetime }
+import from typing { cast }
 import uuid;
 import asyncio;
+
+def case_created_at(item: dict[str, str]) -> str {
+    return item["created_at"];
+}
 
 walker:pub submit_pa {
     has patient_name: str;
@@ -66,44 +72,43 @@ walker:pub parse_denial {
     has denial_date: str;
 
     can analyze with Root entry {
-        patient_case = &self.case_id;
+        patient_case = cast(PatientCase, &self.case_id);
 
-        requests = [patient_case->:HasRequest:->][?:PARequest];
+        requests: list[PARequest] = [patient_case->:HasRequest:->][?:PARequest];
         if not requests {
             report {"error": "No PA request found for this case"};
             disengage;
         }
-        req = requests[0];
+        req: PARequest = requests[0];
 
-        payer_name = patient_case.payer_name;
+        payer_name: str = patient_case.payer_name;
 
-        analysis = analyze_denial(
+        analysis = cast(DenialAnalysis, analyze_denial(
             denial_text=self.raw_denial_text,
             payer_name=payer_name,
             cpt_code=req.cpt_code,
             patient_diagnosis=req.diagnosis_codes[0] if req.diagnosis_codes else ""
-        ) by llm();
+        ) by llm());
 
-        denial_type = analysis.denial_type;
+        denial_type: str = analysis.denial_type;
+        base_score: float = 0.05;
         if denial_type == "medical_necessity" {
             base_score = 0.82;
         } elif denial_type == "step_therapy" {
             base_score = 0.78;
         } elif denial_type == "administrative" {
             base_score = 0.95;
-        } else {
-            base_score = 0.05;
         }
 
-        docs_available = ["physician_notes", "lab_results", "treatment_history"];
-        llm_score = score_appeal_viability(
+        docs_available: list[str] = ["physician_notes", "lab_results", "treatment_history"];
+        llm_score = cast(float, score_appeal_viability(
             denial_type=denial_type,
             criterion_failed=analysis.criterion_failed,
             documentation_available=docs_available
-        ) by llm();
+        ) by llm());
 
-        final_score = (base_score * 0.6) + (llm_score * 0.4);
-        is_viable = final_score > 0.5;
+        final_score: float = (base_score * 0.6) + (llm_score * 0.4);
+        is_viable: bool = final_score > 0.5;
 
         denial = DenialRecord(
             denial_id=str(uuid.uuid4()),
@@ -139,21 +144,21 @@ walker:pub draft_appeal {
     has clinical_evidence: str = "";
 
     can generate with Root entry {
-        now = datetime.now().isoformat();
+        now: str = datetime.now().isoformat();
 
-        patient_case = &self.case_id;
-        requests = [patient_case->:HasRequest:->][?:PARequest];
+        patient_case = cast(PatientCase, &self.case_id);
+        requests: list[PARequest] = [patient_case->:HasRequest:->][?:PARequest];
         if not requests { report {"error": "No PA request found"}; disengage; }
-        req = requests[0];
+        req: PARequest = requests[0];
 
-        denials = [req->:HasDenial:->][?:DenialRecord];
+        denials: list[DenialRecord] = [req->:HasDenial:->][?:DenialRecord];
         if not denials { report {"error": "No denial found — cannot draft appeal"}; disengage; }
-        denial = denials[0];
+        denial: DenialRecord = denials[0];
 
-        evidence = req.treatment_history;
+        evidence: str = req.treatment_history;
         if self.clinical_evidence { evidence = evidence + " " + self.clinical_evidence; }
 
-        analysis = DenialAnalysis(
+        analysis: DenialAnalysis = DenialAnalysis(
             denial_type=denial.denial_type,
             criterion_failed=denial.criterion_failed,
             missing_documentation=denial.missing_documentation,
@@ -161,14 +166,14 @@ walker:pub draft_appeal {
             denial_reason_summary=denial.denial_reason_summary
         );
 
-        letter = draft_appeal_letter(
+        letter = cast(AppealLetter, draft_appeal_letter(
             denial_analysis=analysis,
             patient_name=patient_case.patient_name,
             drug_or_service=req.drug_name,
             diagnosis=req.diagnosis_codes[0] if req.diagnosis_codes else "",
             treatment_history=req.treatment_history,
             clinical_evidence=evidence
-        ) by llm();
+        ) by llm());
 
         appeal = AppealRecord(
             appeal_id=str(uuid.uuid4()),
@@ -201,17 +206,17 @@ walker:pub submit_appeal {
     has appeal_id: str;
 
     can submit with Root entry {
-        appeal = &self.appeal_id;
+        appeal = cast(AppealRecord, &self.appeal_id);
         appeal.status = "submitted";
         appeal.submitted_at = datetime.now().isoformat();
 
-        all_cases = [root-->][?:PatientCase];
+        all_cases: list[PatientCase] = [root-->][?:PatientCase];
         for patient_case in all_cases {
-            requests = [patient_case->:HasRequest:->][?:PARequest];
+            requests: list[PARequest] = [patient_case->:HasRequest:->][?:PARequest];
             for req in requests {
-                denials = [req->:HasDenial:->][?:DenialRecord];
+                denials: list[DenialRecord] = [req->:HasDenial:->][?:DenialRecord];
                 for denial in denials {
-                    appeals = [denial->:HasAppeal:->][?:AppealRecord];
+                    appeals: list[AppealRecord] = [denial->:HasAppeal:->][?:AppealRecord];
                     for app in appeals {
                         if jid(app) == self.appeal_id {
                             req.status = "appeal_submitted";
@@ -234,12 +239,12 @@ walker:pub submit_appeal {
 
 walker:pub get_all_cases {
     can fetch with Root entry {
-        all_cases = [root-->][?:PatientCase];
-        result = [];
+        all_cases: list[PatientCase] = [root-->][?:PatientCase];
+        result: list[dict] = [];
 
         for patient_case in all_cases {
-            requests = [patient_case->:HasRequest:->][?:PARequest];
-            req = requests[0] if requests else None;
+            requests: list[PARequest] = [patient_case->:HasRequest:->][?:PARequest];
+            req: PARequest | None = requests[0] if requests else None;
 
             has_denial = False;
             has_appeal = False;
@@ -277,7 +282,7 @@ walker:pub get_all_cases {
             });
         }
 
-        result.sort(key=lambda x: x["created_at"], reverse=True);
+        result = sorted(result, key=case_created_at, reverse=True);
         report result;
     }
 }
@@ -286,18 +291,18 @@ walker:pub get_case_detail {
     has case_id: str;
 
     can fetch with Root entry {
-        patient_case = &self.case_id;
+        patient_case = cast(PatientCase, &self.case_id);
 
-        requests = [patient_case->:HasRequest:->][?:PARequest];
+        requests: list[PARequest] = [patient_case->:HasRequest:->][?:PARequest];
         if not requests { report {"error": "No request found"}; disengage; }
-        req = requests[0];
+        req: PARequest = requests[0];
 
-        denial_data = None;
-        appeal_data = None;
+        denial_data: dict | None = None;
+        appeal_data: dict | None = None;
 
-        denials = [req->:HasDenial:->][?:DenialRecord];
+        denials: list[DenialRecord] = [req->:HasDenial:->][?:DenialRecord];
         if denials {
-            d = denials[0];
+            d: DenialRecord = denials[0];
             denial_data = {
                 "denial_id": jid(d),
                 "denial_type": d.denial_type,
@@ -311,9 +316,9 @@ walker:pub get_case_detail {
                 "raw_denial_text": d.raw_denial_text
             };
 
-            appeals = [d->:HasAppeal:->][?:AppealRecord];
+            appeals: list[AppealRecord] = [d->:HasAppeal:->][?:AppealRecord];
             if appeals {
-                a = appeals[0];
+                a: AppealRecord = appeals[0];
                 appeal_data = {
                     "appeal_id": jid(a),
                     "subject_line": a.subject_line,
@@ -503,13 +508,13 @@ async walker :pub agent_status_stream {
     has case_id: str;
 
     async can stream with Root entry {
-        patient_case = &self.case_id;
-        requests = [patient_case->:HasRequest:->][?:PARequest];
+        patient_case = cast(PatientCase, &self.case_id);
+        requests: list[PARequest] = [patient_case->:HasRequest:->][?:PARequest];
         if not requests {
             report {"error": "Case not found"};
             disengage;
         }
-        req = requests[0];
+        req: PARequest = requests[0];
 
         report {
             "step": 1,
@@ -556,7 +561,7 @@ async walker :pub agent_status_stream {
             "durationMs": 1000
         };
 
-        denials = [req->:HasDenial:->][?:DenialRecord];
+        denials: list[DenialRecord] = [req->:HasDenial:->][?:DenialRecord];
         if not denials {
             report {
                 "step": 4,
@@ -574,7 +579,7 @@ async walker :pub agent_status_stream {
                 "durationMs": 0
             };
 
-            denial = denials[0];
+            denial: DenialRecord = denials[0];
 
             report {
                 "step": 5,
@@ -598,7 +603,7 @@ async walker :pub agent_status_stream {
                 "detail": "Applying AMA overturn data and payer-specific pattern analysis..."
             };
             await asyncio.sleep(1.0);
-            score_pct = int(denial.appeal_viability_score * 100);
+            score_pct: int = int(denial.appeal_viability_score * 100);
             report {
                 "step": 6,
                 "status": "done",
@@ -609,7 +614,7 @@ async walker :pub agent_status_stream {
                 "durationMs": 1000
             };
 
-            appeals = [denial->:HasAppeal:->][?:AppealRecord];
+            appeals: list[AppealRecord] = [denial->:HasAppeal:->][?:AppealRecord];
             if appeals {
                 report {
                     "step": 7,
