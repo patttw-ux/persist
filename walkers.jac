@@ -1,0 +1,498 @@
+import from models {
+    PatientCase, PARequest, DenialRecord, AppealRecord, MonitorStatus,
+    HasRequest, HasDenial, HasAppeal, HasMonitor
+}
+import from abilities {
+    DenialAnalysis, analyze_denial, draft_appeal_letter, score_appeal_viability
+}
+import from datetime { datetime }
+import uuid;
+
+walker:pub submit_pa {
+    has patient_name: str;
+    has patient_id: str;
+    has dob: str;
+    has payer_name: str;
+    has member_id: str;
+    has cpt_code: str;
+    has drug_name: str;
+    has diagnosis_codes: list[str];
+    has treatment_history: str = "";
+
+    can create with Root entry {
+        now = datetime.now().isoformat();
+
+        patient_case = PatientCase(
+            patient_id=self.patient_id,
+            patient_name=self.patient_name,
+            dob=self.dob,
+            payer_name=self.payer_name,
+            member_id=self.member_id,
+            created_at=now
+        );
+        root ++> patient_case;
+
+        req = PARequest(
+            req_id=self.patient_id + "_" + now[:10],
+            cpt_code=self.cpt_code,
+            drug_name=self.drug_name,
+            diagnosis_codes=self.diagnosis_codes,
+            treatment_history=self.treatment_history,
+            status="submitted",
+            submitted_at=now,
+            created_at=now
+        );
+        patient_case +>:HasRequest:+> req;
+
+        monitor = MonitorStatus(
+            last_checked=now,
+            days_pending=0
+        );
+        req +>:HasMonitor:+> monitor;
+
+        report {
+            "case_id": jid(patient_case),
+            "req_id": jid(req),
+            "status": "submitted",
+            "message": "Persist is now monitoring this authorization"
+        };
+    }
+}
+
+walker:pub parse_denial {
+    has case_id: str;
+    has raw_denial_text: str;
+    has denial_date: str;
+
+    can analyze with Root entry {
+        patient_case = &self.case_id;
+
+        requests = [patient_case->:HasRequest:->][?:PARequest];
+        if not requests {
+            report {"error": "No PA request found for this case"};
+            disengage;
+        }
+        req = requests[0];
+
+        payer_name = patient_case.payer_name;
+
+        analysis = analyze_denial(
+            denial_text=self.raw_denial_text,
+            payer_name=payer_name,
+            cpt_code=req.cpt_code,
+            patient_diagnosis=req.diagnosis_codes[0] if req.diagnosis_codes else ""
+        ) by llm();
+
+        denial_type = analysis.denial_type;
+        if denial_type == "medical_necessity" {
+            base_score = 0.82;
+        } elif denial_type == "step_therapy" {
+            base_score = 0.78;
+        } elif denial_type == "administrative" {
+            base_score = 0.95;
+        } else {
+            base_score = 0.05;
+        }
+
+        docs_available = ["physician_notes", "lab_results", "treatment_history"];
+        llm_score = score_appeal_viability(
+            denial_type=denial_type,
+            criterion_failed=analysis.criterion_failed,
+            documentation_available=docs_available
+        ) by llm();
+
+        final_score = (base_score * 0.6) + (llm_score * 0.4);
+        is_viable = final_score > 0.5;
+
+        denial = DenialRecord(
+            denial_id=str(uuid.uuid4()),
+            raw_denial_text=self.raw_denial_text,
+            denial_type=analysis.denial_type,
+            criterion_failed=analysis.criterion_failed,
+            missing_documentation=analysis.missing_documentation,
+            appeal_strategy=analysis.appeal_strategy,
+            denial_reason_summary=analysis.denial_reason_summary,
+            appeal_viability_score=final_score,
+            appeal_viable=is_viable,
+            denial_date=self.denial_date
+        );
+        req +>:HasDenial:+> denial;
+
+        req.status = "denied";
+
+        report {
+            "denial_id": jid(denial),
+            "denial_type": analysis.denial_type,
+            "criterion_failed": analysis.criterion_failed,
+            "missing_documentation": analysis.missing_documentation,
+            "appeal_strategy": analysis.appeal_strategy,
+            "appeal_viability_score": final_score,
+            "appeal_viable": is_viable,
+            "denial_reason_summary": analysis.denial_reason_summary
+        };
+    }
+}
+
+walker:pub draft_appeal {
+    has case_id: str;
+    has clinical_evidence: str = "";
+
+    can generate with Root entry {
+        now = datetime.now().isoformat();
+
+        patient_case = &self.case_id;
+        requests = [patient_case->:HasRequest:->][?:PARequest];
+        if not requests { report {"error": "No PA request found"}; disengage; }
+        req = requests[0];
+
+        denials = [req->:HasDenial:->][?:DenialRecord];
+        if not denials { report {"error": "No denial found — cannot draft appeal"}; disengage; }
+        denial = denials[0];
+
+        evidence = req.treatment_history;
+        if self.clinical_evidence { evidence = evidence + " " + self.clinical_evidence; }
+
+        analysis = DenialAnalysis(
+            denial_type=denial.denial_type,
+            criterion_failed=denial.criterion_failed,
+            missing_documentation=denial.missing_documentation,
+            appeal_strategy=denial.appeal_strategy,
+            denial_reason_summary=denial.denial_reason_summary
+        );
+
+        letter = draft_appeal_letter(
+            denial_analysis=analysis,
+            patient_name=patient_case.patient_name,
+            drug_or_service=req.drug_name,
+            diagnosis=req.diagnosis_codes[0] if req.diagnosis_codes else "",
+            treatment_history=req.treatment_history,
+            clinical_evidence=evidence
+        ) by llm();
+
+        appeal = AppealRecord(
+            appeal_id=str(uuid.uuid4()),
+            subject_line=letter.subject_line,
+            opening_paragraph=letter.opening_paragraph,
+            clinical_justification=letter.clinical_justification,
+            evidence_cited=letter.evidence_cited,
+            closing_paragraph=letter.closing_paragraph,
+            full_letter=letter.full_letter,
+            appeal_type=denial.denial_type,
+            status="drafted",
+            filed_at=now
+        );
+        denial +>:HasAppeal:+> appeal;
+
+        req.status = "appeal_drafted";
+
+        report {
+            "appeal_id": jid(appeal),
+            "subject_line": letter.subject_line,
+            "full_letter": letter.full_letter,
+            "clinical_justification": letter.clinical_justification,
+            "evidence_cited": letter.evidence_cited,
+            "status": "drafted"
+        };
+    }
+}
+
+walker:pub submit_appeal {
+    has appeal_id: str;
+
+    can submit with Root entry {
+        appeal = &self.appeal_id;
+        appeal.status = "submitted";
+        appeal.submitted_at = datetime.now().isoformat();
+
+        all_cases = [root-->][?:PatientCase];
+        for patient_case in all_cases {
+            requests = [patient_case->:HasRequest:->][?:PARequest];
+            for req in requests {
+                denials = [req->:HasDenial:->][?:DenialRecord];
+                for denial in denials {
+                    appeals = [denial->:HasAppeal:->][?:AppealRecord];
+                    for app in appeals {
+                        if jid(app) == self.appeal_id {
+                            req.status = "appeal_submitted";
+                            report {
+                                "appeal_id": self.appeal_id,
+                                "status": "submitted",
+                                "submitted_at": appeal.submitted_at,
+                                "message": "Appeal submitted to payer. Persist will monitor for response."
+                            };
+                            disengage;
+                        }
+                    }
+                }
+            }
+        }
+
+        report {"error": "Appeal not found"};
+    }
+}
+
+walker:pub get_all_cases {
+    can fetch with Root entry {
+        all_cases = [root-->][?:PatientCase];
+        result = [];
+
+        for patient_case in all_cases {
+            requests = [patient_case->:HasRequest:->][?:PARequest];
+            req = requests[0] if requests else None;
+
+            has_denial = False;
+            has_appeal = False;
+            appeal_viable = False;
+            viability_score = 0.0;
+
+            if req {
+                denials = [req->:HasDenial:->][?:DenialRecord];
+                if denials {
+                    has_denial = True;
+                    appeal_viable = denials[0].appeal_viable;
+                    viability_score = denials[0].appeal_viability_score;
+                    appeals = [denials[0]->:HasAppeal:->][?:AppealRecord];
+                    if appeals { has_appeal = True; }
+                }
+            }
+
+            result.append({
+                "case_id": jid(patient_case),
+                "patient_name": patient_case.patient_name,
+                "patient_id": patient_case.patient_id,
+                "dob": patient_case.dob,
+                "payer_name": patient_case.payer_name,
+                "member_id": patient_case.member_id,
+                "cpt_code": req.cpt_code if req else "",
+                "drug_name": req.drug_name if req else "",
+                "status": req.status if req else "unknown",
+                "submitted_at": req.submitted_at if req else "",
+                "preauth_ref": req.preauth_ref if req else "",
+                "has_denial": has_denial,
+                "has_appeal": has_appeal,
+                "appeal_viable": appeal_viable,
+                "viability_score": viability_score,
+                "created_at": patient_case.created_at
+            });
+        }
+
+        result.sort(key=lambda x: x["created_at"], reverse=True);
+        report result;
+    }
+}
+
+walker:pub get_case_detail {
+    has case_id: str;
+
+    can fetch with Root entry {
+        patient_case = &self.case_id;
+
+        requests = [patient_case->:HasRequest:->][?:PARequest];
+        if not requests { report {"error": "No request found"}; disengage; }
+        req = requests[0];
+
+        denial_data = None;
+        appeal_data = None;
+
+        denials = [req->:HasDenial:->][?:DenialRecord];
+        if denials {
+            d = denials[0];
+            denial_data = {
+                "denial_id": jid(d),
+                "denial_type": d.denial_type,
+                "criterion_failed": d.criterion_failed,
+                "missing_documentation": d.missing_documentation,
+                "appeal_strategy": d.appeal_strategy,
+                "denial_reason_summary": d.denial_reason_summary,
+                "appeal_viability_score": d.appeal_viability_score,
+                "appeal_viable": d.appeal_viable,
+                "denial_date": d.denial_date,
+                "raw_denial_text": d.raw_denial_text
+            };
+
+            appeals = [d->:HasAppeal:->][?:AppealRecord];
+            if appeals {
+                a = appeals[0];
+                appeal_data = {
+                    "appeal_id": jid(a),
+                    "subject_line": a.subject_line,
+                    "full_letter": a.full_letter,
+                    "clinical_justification": a.clinical_justification,
+                    "evidence_cited": a.evidence_cited,
+                    "appeal_type": a.appeal_type,
+                    "status": a.status,
+                    "submitted_at": a.submitted_at,
+                    "filed_at": a.filed_at
+                };
+            }
+        }
+
+        report {
+            "case_id": jid(patient_case),
+            "patient_name": patient_case.patient_name,
+            "patient_id": patient_case.patient_id,
+            "dob": patient_case.dob,
+            "payer_name": patient_case.payer_name,
+            "member_id": patient_case.member_id,
+            "req_id": jid(req),
+            "cpt_code": req.cpt_code,
+            "drug_name": req.drug_name,
+            "diagnosis_codes": req.diagnosis_codes,
+            "treatment_history": req.treatment_history,
+            "status": req.status,
+            "submitted_at": req.submitted_at,
+            "preauth_ref": req.preauth_ref,
+            "priority": req.priority,
+            "denial": denial_data,
+            "appeal": appeal_data
+        };
+    }
+}
+
+walker:pub seed_demo_data {
+    can seed with Root entry {
+        now = datetime.now().isoformat();
+
+        existing = [root-->][?:PatientCase];
+        for c in existing { del c; }
+
+        case1 = PatientCase(
+            patient_id="UHC987654321",
+            patient_name="Sarah Johnson",
+            dob="1978-04-22",
+            payer_name="UnitedHealthcare",
+            member_id="UHC987654321",
+            created_at="2026-05-08T09:00:00"
+        );
+        root ++> case1;
+
+        req1 = PARequest(
+            req_id="PA-2026-UHC-001",
+            cpt_code="J0135",
+            drug_name="Adalimumab 40mg (Humira)",
+            diagnosis_codes=["M05.79"],
+            treatment_history="Patient completed 6 months of methotrexate 20mg weekly with inadequate response. DAS28-CRP remained above 5.1 throughout treatment period. Discontinued due to inadequate clinical response per ACR guidelines.",
+            status="denied",
+            submitted_at="2026-05-08T09:00:00",
+            created_at="2026-05-08T09:00:00",
+            priority=1
+        );
+        case1 +>:HasRequest:+> req1;
+
+        denial1 = DenialRecord(
+            denial_id=str(uuid.uuid4()),
+            raw_denial_text="PRIOR AUTHORIZATION DENIAL NOTICE\nDate: May 8, 2026\nMember: Sarah Johnson | ID: UHC987654321\nService: Adalimumab 40mg (Humira) | CPT: J0135\nDenial Reason: CO-50 Medical Necessity Not Established\n\nCriterion Not Met: Per UnitedHealthcare Clinical Policy CP.PHAR.118, coverage of adalimumab requires documentation of inadequate response to at least one conventional DMARD (methotrexate or sulfasalazine) for a minimum duration of 3 months at adequate doses. The submitted documentation does not confirm completion of the required step therapy protocol with objective outcome measures.\n\nMissing Documentation: Documented DAS28-CRP scores during methotrexate trial period, specific methotrexate dose and duration with start and end dates, objective measurement of inadequate response using validated clinical assessment.\n\nAppeal Rights: You have 180 days from the date of this notice to file an internal appeal. Please contact UnitedHealthcare Appeals Department at 1-866-892-2552.",
+            denial_type="step_therapy",
+            criterion_failed="Documentation of inadequate response to conventional DMARD (methotrexate) for minimum 3 months with objective outcome measures per CP.PHAR.118",
+            missing_documentation=["DAS28-CRP scores during methotrexate trial", "Specific methotrexate dose and duration with dates", "Objective measurement of inadequate response"],
+            appeal_strategy="Document 6-month methotrexate trial with DAS28-CRP scores proving inadequate response. Cite ACR guidelines recommending biologic therapy after DMARD failure. Attach lab results showing persistent elevated inflammatory markers.",
+            denial_reason_summary="UHC denied because they need documented proof with objective scores that methotrexate was tried and failed — you have the evidence, just need to present it correctly",
+            appeal_viability_score=0.89,
+            appeal_viable=True,
+            denial_date="2026-05-08"
+        );
+        req1 +>:HasDenial:+> denial1;
+
+        case2 = PatientCase(
+            patient_id="BCBS445521",
+            patient_name="Michael Chen",
+            dob="1965-11-15",
+            payer_name="Blue Cross Blue Shield",
+            member_id="BCBS445521",
+            created_at="2026-05-12T14:00:00"
+        );
+        root ++> case2;
+
+        req2 = PARequest(
+            req_id="PA-2026-BCBS-002",
+            cpt_code="72148",
+            drug_name="MRI Lumbar Spine without contrast",
+            diagnosis_codes=["M54.5"],
+            treatment_history="6 weeks conservative therapy including physical therapy and NSAIDs without adequate pain relief.",
+            status="submitted",
+            submitted_at="2026-05-12T14:00:00",
+            created_at="2026-05-12T14:00:00",
+            priority=2
+        );
+        case2 +>:HasRequest:+> req2;
+
+        monitor2 = MonitorStatus(
+            last_checked=now,
+            days_pending=2,
+            cms_deadline_7day=False,
+            follow_up_required=False
+        );
+        req2 +>:HasMonitor:+> monitor2;
+
+        case3 = PatientCase(
+            patient_id="AET882341",
+            patient_name="Patricia Williams",
+            dob="1952-03-08",
+            payer_name="Aetna",
+            member_id="AET882341",
+            created_at="2026-04-28T10:00:00"
+        );
+        root ++> case3;
+
+        req3 = PARequest(
+            req_id="PA-2026-AET-003",
+            cpt_code="J3490",
+            drug_name="Semaglutide (Ozempic) 1mg",
+            diagnosis_codes=["E11.9"],
+            treatment_history="Failed metformin 2000mg daily for 6 months. HbA1c 9.2% at baseline. Added sitagliptin with inadequate response at 3 months.",
+            status="appeal_submitted",
+            submitted_at="2026-04-28T10:00:00",
+            preauth_ref="PA-2026-AET-882341",
+            created_at="2026-04-28T10:00:00",
+            priority=3
+        );
+        case3 +>:HasRequest:+> req3;
+
+        case4 = PatientCase(
+            patient_id="CIG445521",
+            patient_name="Robert Martinez",
+            dob="1958-07-19",
+            payer_name="Cigna",
+            member_id="CIG445521",
+            created_at="2026-05-10T11:00:00"
+        );
+        root ++> case4;
+
+        req4 = PARequest(
+            req_id="PA-2026-CIG-004",
+            cpt_code="93798",
+            drug_name="Cardiac Rehabilitation Program (36 sessions)",
+            diagnosis_codes=["I25.10"],
+            treatment_history="Recent CABG surgery April 2026. Cardiologist referral for Phase II cardiac rehabilitation.",
+            status="denied",
+            submitted_at="2026-05-10T11:00:00",
+            created_at="2026-05-10T11:00:00",
+            priority=1
+        );
+        case4 +>:HasRequest:+> req4;
+
+        denial4 = DenialRecord(
+            denial_id=str(uuid.uuid4()),
+            raw_denial_text="PRIOR AUTHORIZATION DENIAL NOTICE\nDate: May 10, 2026\nMember: Robert Martinez | ID: CIG445521\nService: Cardiac Rehabilitation | CPT: 93798\nDenial Reason: CO-50 Medical Necessity Not Established\n\nThe submitted documentation does not demonstrate that the member meets Cigna coverage criteria for cardiac rehabilitation program. Required qualifying event: documented myocardial infarction within 12 months OR recent coronary artery bypass surgery with operative report OR stable angina pectoris with documented exercise capacity less than 5 METs.\n\nNote: Operative report from CABG procedure was not included in submission.",
+            denial_type="administrative",
+            criterion_failed="Missing operative report from CABG surgery — qualifying event documentation not included in submission",
+            missing_documentation=["CABG operative report", "Discharge summary from cardiac surgery", "Cardiologist referral letter specifying Phase II cardiac rehab"],
+            appeal_strategy="Administrative denial — resubmit with CABG operative report and discharge summary. 95% overturn rate for administrative denials with correct documentation.",
+            denial_reason_summary="Cigna just needs the surgery paperwork — the CABG operative report was missing from the original submission. This is a simple administrative fix.",
+            appeal_viability_score=0.95,
+            appeal_viable=True,
+            denial_date="2026-05-10"
+        );
+        req4 +>:HasDenial:+> denial4;
+
+        report {
+            "message": "Demo data seeded — 4 cases created",
+            "cases": [
+                {"name": "Sarah Johnson", "status": "denied", "viability": 0.89},
+                {"name": "Michael Chen", "status": "submitted"},
+                {"name": "Patricia Williams", "status": "appeal_submitted"},
+                {"name": "Robert Martinez", "status": "denied", "viability": 0.95}
+            ]
+        };
+    }
+}
