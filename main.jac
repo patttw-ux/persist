@@ -9,7 +9,7 @@ import from abilities {
     score_appeal_viability
 }
 import from walkers {
-    submit_pa, parse_denial, draft_appeal, submit_appeal,
+    submit_pa, audit_prior_auth, parse_denial, draft_appeal, submit_appeal,
     auto_process_case,
     get_all_cases, get_case_detail, seed_demo_data,
     seed_payer_intelligence, get_payer_profile, record_denial_pattern,

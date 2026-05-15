@@ -83,6 +83,20 @@ node DenialPattern {
     has win_rate: float = 0.0;
 }
 
+node PreSubmissionAudit {
+    has audit_id: str;
+    has payer_name: str;
+    has cpt_code: str;
+    has criteria_engine: str;
+    has gaps_detected: list[str];
+    has gaps_critical: list[str];
+    has gaps_recommended: list[str];
+    has submission_ready: bool = False;
+    has confidence_score: float = 0.0;
+    has audit_timestamp: str;
+    has estimated_approval_probability: float = 0.0;
+}
+
 # Typed edges
 edge HasRequest { has created_at: str = ""; }
 edge HasDenial  { has detected_at: str = ""; }
@@ -91,3 +105,4 @@ edge HasMonitor {}
 edge NextStep   {}
 edge HasPayerProfile {}
 edge HasDenialPattern {}
+edge HasAudit {}

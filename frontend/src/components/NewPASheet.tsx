@@ -6,7 +6,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { api } from "@/lib/api";
-import { Loader2 } from "lucide-react";
+import type { PreSubmissionAudit } from "@/lib/types";
+import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -21,7 +22,12 @@ const PAYER_OPTIONS = [
   "Other",
 ] as const;
 
-type FieldKey = "patient_name" | "dob" | "member_id" | "payer_name";
+type FieldKey =
+  | "patient_name"
+  | "dob"
+  | "member_id"
+  | "payer_name"
+  | "treatment_history";
 
 interface NewPASheetProps {
   open: boolean;
@@ -50,6 +56,30 @@ function inputClass(hasError: boolean): string {
   ].join(" ");
 }
 
+function treatmentAreaClass(hasError: boolean, docHint: boolean): string {
+  const border = hasError
+    ? "border-red-500"
+    : docHint
+      ? "border-amber-400"
+      : "border-slate-200";
+  return [
+    "flex min-h-[100px] w-full rounded-md border bg-white px-3 py-2 text-sm text-slate-900 shadow-sm ring-offset-white placeholder:text-slate-400",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2",
+    border,
+  ].join(" ");
+}
+
+function approvalPct(audit: PreSubmissionAudit): number {
+  const x = audit.estimated_approval_probability;
+  if (Number.isNaN(x)) return 0;
+  return x <= 1 ? Math.round(x * 100) : Math.round(x);
+}
+
+function gapsSuggestStepTherapy(gaps: string[]): boolean {
+  const re = /step therapy|prior treatment|preferred alternative|documentation/i;
+  return gaps.some((g) => re.test(g));
+}
+
 export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
   const [form, setForm] = useState(initialForm);
   const [fieldErrors, setFieldErrors] = useState<
@@ -57,12 +87,20 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
   >({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [auditResult, setAuditResult] = useState<PreSubmissionAudit | null>(
+    null
+  );
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [docHintHighlight, setDocHintHighlight] = useState(false);
 
   useEffect(() => {
     if (!open) {
       setForm(initialForm);
       setFieldErrors({});
       setSubmitError(null);
+      setAuditResult(null);
+      setAuditLoading(false);
+      setDocHintHighlight(false);
     }
   }, [open]);
 
@@ -73,7 +111,8 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
       fk === "patient_name" ||
       fk === "dob" ||
       fk === "member_id" ||
-      fk === "payer_name"
+      fk === "payer_name" ||
+      fk === "treatment_history"
     ) {
       setFieldErrors((e) => {
         if (!e[fk]) {
@@ -84,7 +123,10 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
         return next;
       });
     }
-  }
+    if (key === "treatment_history" && docHintHighlight) {
+      setDocHintHighlight(false);
+    }
+  };
 
   const validate = (): boolean => {
     const next: Partial<Record<FieldKey, string>> = {};
@@ -104,18 +146,15 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
     return Object.keys(next).length === 0;
   };
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    setSubmitError(null);
-    if (!validate()) {
-      return;
-    }
+  const buildDiagnosisCodes = (): string[] => {
+    const code = form.diagnosis_icd10.trim();
+    return code ? [code] : [];
+  };
 
-    const diagnosis_codes = form.diagnosis_icd10.trim()
-      ? [form.diagnosis_icd10.trim()]
-      : [];
-
+  const runSubmitPA = async () => {
+    const diagnosis_codes = buildDiagnosisCodes();
     setSubmitting(true);
+    setSubmitError(null);
     try {
       await api.submitPA({
         patient_name: form.patient_name.trim(),
@@ -144,6 +183,82 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
       setSubmitting(false);
     }
   };
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setSubmitError(null);
+    if (!validate()) {
+      return;
+    }
+
+    setAuditLoading(true);
+    setAuditResult(null);
+    try {
+      const diagnosis_codes = buildDiagnosisCodes();
+      const audit = await api.auditPriorAuth({
+        patient_name: form.patient_name.trim(),
+        payer_name: form.payer_name.trim(),
+        cpt_code: form.cpt_code.trim(),
+        diagnosis_codes,
+        drug_name: form.drug_name.trim(),
+        treatment_history: form.treatment_history.trim(),
+      });
+      setAuditResult(audit);
+
+      if (audit.gaps_critical.length > 0) {
+        return;
+      }
+
+      if (audit.submission_ready) {
+        await new Promise((r) => setTimeout(r, 350));
+        await runSubmitPA();
+        return;
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Audit failed. Try again.";
+      setSubmitError(message);
+      toast.error(`Something went wrong — ${message}`, {
+        duration: 5000,
+      });
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
+  const handleFixAndResubmit = () => {
+    if (auditResult && gapsSuggestStepTherapy(auditResult.gaps_critical)) {
+      setDocHintHighlight(true);
+      setFieldErrors((prev) => ({
+        ...prev,
+        treatment_history:
+          "Add step therapy history or documented failure of preferred alternatives",
+      }));
+    }
+    setAuditResult(null);
+  };
+
+  const handleSubmitAnyway = async () => {
+    setSubmitError(null);
+    await runSubmitPA();
+  };
+
+  const handleNeutralContinue = async () => {
+    setSubmitError(null);
+    await runSubmitPA();
+  };
+
+  const busy = auditLoading || submitting;
+  const showCritical =
+    auditResult !== null && auditResult.gaps_critical.length > 0;
+  const showReady =
+    auditResult !== null &&
+    auditResult.gaps_critical.length === 0 &&
+    auditResult.submission_ready;
+  const showNeutral =
+    auditResult !== null &&
+    auditResult.gaps_critical.length === 0 &&
+    !auditResult.submission_ready;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -318,25 +433,149 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
                 handleChange("treatment_history", e.target.value)
               }
               placeholder="Prior treatments attempted, duration, and outcomes..."
-              className="flex min-h-[100px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm ring-offset-white placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              className={treatmentAreaClass(
+                Boolean(fieldErrors.treatment_history),
+                docHintHighlight
+              )}
+              aria-invalid={Boolean(fieldErrors.treatment_history)}
             />
+            {fieldErrors.treatment_history ? (
+              <p className="mt-1 text-sm text-amber-800">
+                {fieldErrors.treatment_history}
+              </p>
+            ) : null}
           </div>
 
+          {showCritical ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <div className="flex gap-2">
+                <AlertTriangle
+                  className="mt-0.5 h-5 w-5 shrink-0 text-amber-600"
+                  aria-hidden
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-amber-900">
+                    Persist detected gaps that may cause denial
+                  </p>
+                  <ul className="mt-2 list-inside list-disc text-sm text-amber-900/90">
+                    {auditResult!.gaps_critical.map((gap) => (
+                      <li key={gap} className="pl-0">
+                        {gap}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-3 text-sm text-amber-900/90">
+                    Estimated approval probability:{" "}
+                    <span className="font-mono font-medium">
+                      {approvalPct(auditResult!)}%
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => handleFixAndResubmit()}
+                  className="inline-flex flex-1 items-center justify-center rounded-md bg-amber-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-700"
+                >
+                  Fix &amp; Resubmit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSubmitAnyway()}
+                  disabled={submitting}
+                  className="inline-flex flex-1 items-center justify-center rounded-md px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                >
+                  Submit Anyway
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {showReady ? (
+            <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+              <div className="flex gap-2">
+                <CheckCircle2
+                  className="mt-0.5 h-5 w-5 shrink-0 text-green-600"
+                  aria-hidden
+                />
+                <div>
+                  <p className="text-sm font-medium text-green-900">
+                    Persist audit passed — ready for submission
+                  </p>
+                  <p className="mt-2 text-sm text-green-900/90">
+                    Estimated approval probability:{" "}
+                    <span className="font-mono font-medium">
+                      {approvalPct(auditResult!)}%
+                    </span>
+                  </p>
+                  {submitting ? (
+                    <p className="mt-3 flex items-center gap-2 text-sm text-green-800">
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                      Submitting…
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {showNeutral ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-medium text-slate-900">
+                Review before submitting
+              </p>
+              {auditResult!.audit_summary ? (
+                <p className="mt-2 text-sm text-slate-700">
+                  {auditResult!.audit_summary}
+                </p>
+              ) : null}
+              {auditResult!.gaps_recommended.length > 0 ? (
+                <ul className="mt-2 list-inside list-disc text-sm text-slate-700">
+                  {auditResult!.gaps_recommended.map((g) => (
+                    <li key={g}>{g}</li>
+                  ))}
+                </ul>
+              ) : null}
+              <p className="mt-3 text-sm text-slate-600">
+                Estimated approval probability:{" "}
+                <span className="font-mono font-medium">
+                  {approvalPct(auditResult!)}%
+                </span>
+              </p>
+              <button
+                type="button"
+                onClick={() => void handleNeutralContinue()}
+                disabled={submitting}
+                className="mt-4 inline-flex w-full items-center justify-center rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                Continue to submit
+              </button>
+            </div>
+          ) : null}
+
           <div className="pt-2">
-            <button
-              type="submit"
-              disabled={submitting}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:pointer-events-none disabled:opacity-50"
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                  Submitting...
-                </>
-              ) : (
-                "Submit to Persist Agent"
-              )}
-            </button>
+            {auditResult === null ? (
+              <button
+                type="submit"
+                disabled={busy}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:pointer-events-none disabled:opacity-50"
+              >
+                {auditLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    Auditing…
+                  </>
+                ) : submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    Submitting…
+                  </>
+                ) : (
+                  "Submit to Persist Agent"
+                )}
+              </button>
+            ) : null}
             {submitError ? (
               <p className="mt-2 text-center text-sm text-red-600">
                 {submitError}

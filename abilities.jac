@@ -20,6 +20,15 @@ obj AppealLetter {
     has full_letter: str;
 }
 
+obj PreSubmissionAuditResult {
+    has gaps_critical: list[str];
+    has gaps_recommended: list[str];
+    has submission_ready: bool;
+    has confidence_score: float;
+    has estimated_approval_probability: float;
+    has audit_summary: str;
+}
+
 # Ability 1: Parse denial letter into structured analysis
 sem analyze_denial = "Analyzes a prior authorization denial letter using payer-specific criteria knowledge";
 sem analyze_denial.denial_text = "The complete text of the payer denial letter including reason codes and narrative";
@@ -72,3 +81,25 @@ def score_appeal_viability(
     criterion_failed: str,
     documentation_available: list[str]
 ) -> float by llm();
+
+# Ability 4: Pre-submission gap audit (prior to PA submission)
+sem audit_submission_gaps = "Audits a prior authorization request against payer-specific criteria before submission to identify documentation gaps that would cause denial";
+sem audit_submission_gaps.payer_name = "Insurance payer name such as UnitedHealthcare or BCBS";
+sem audit_submission_gaps.criteria_engine = "Clinical criteria engine this payer uses: InterQual for UHC, AIM for BCBS, CPB for Aetna";
+sem audit_submission_gaps.appeal_language_notes = "Payer-specific criteria requirements and common denial reasons";
+sem audit_submission_gaps.cpt_code = "CPT or HCPCS procedure code being requested";
+sem audit_submission_gaps.diagnosis_codes = "ICD-10 diagnosis codes supporting the request";
+sem audit_submission_gaps.drug_name = "Medication or service name being requested";
+sem audit_submission_gaps.treatment_history = "Prior treatments attempted including step therapy history";
+sem audit_submission_gaps.clinical_notes = "Any additional clinical documentation available";
+sem audit_submission_gaps.return = "Structured audit result identifying critical gaps that will cause denial, recommended improvements, whether submission is ready, and estimated approval probability";
+def audit_submission_gaps(
+    payer_name: str,
+    criteria_engine: str,
+    appeal_language_notes: str,
+    cpt_code: str,
+    diagnosis_codes: list[str],
+    drug_name: str,
+    treatment_history: str,
+    clinical_notes: str
+) -> PreSubmissionAuditResult by llm();

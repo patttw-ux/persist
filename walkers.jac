@@ -1,12 +1,12 @@
 import from models {
     PatientCase, PARequest, DenialRecord, AppealRecord, MonitorStatus,
-    PayerProfile, DenialPattern,
+    PayerProfile, DenialPattern, PreSubmissionAudit,
     HasRequest, HasDenial, HasAppeal, HasMonitor, HasPayerProfile,
-    HasDenialPattern,
+    HasDenialPattern, HasAudit,
 }
 import from abilities {
     DenialAnalysis, AppealLetter, analyze_denial, draft_appeal_letter,
-    score_appeal_viability
+    score_appeal_viability, PreSubmissionAuditResult, audit_submission_gaps
 }
 import from datetime { datetime }
 import from typing { cast }
@@ -65,6 +65,14 @@ walker:pub submit_pa {
         );
         patient_case +>:HasRequest:+> req;
 
+        recent_audits = [root-->][?:PreSubmissionAudit];
+        for a in recent_audits {
+            if a.payer_name == self.payer_name and a.cpt_code == self.cpt_code {
+                req +>:HasAudit:+> a;
+                break;
+            }
+        }
+
         monitor = MonitorStatus(
             last_checked=now,
             days_pending=0
@@ -76,6 +84,111 @@ walker:pub submit_pa {
             "req_id": jid(req),
             "status": "submitted",
             "message": "Persist is now monitoring this authorization"
+        };
+    }
+}
+
+walker:pub audit_prior_auth {
+    has patient_name: str;
+    has payer_name: str;
+    has cpt_code: str;
+    has diagnosis_codes: list[str];
+    has drug_name: str;
+    has treatment_history: str = "";
+    has clinical_notes: str = "";
+
+    can run_audit with Root entry {
+        now = datetime.now().isoformat();
+
+        profiles: list[PayerProfile] = [root->:HasPayerProfile:->][?:PayerProfile];
+        criteria_engine = "";
+        appeal_notes = "";
+        step_therapy_required = False;
+        for p in profiles {
+            if p.payer_name == self.payer_name {
+                criteria_engine = p.criteria_engine;
+                appeal_notes = p.appeal_language_notes;
+                step_therapy_required = p.step_therapy_required;
+                break;
+            }
+        }
+
+        audit_result = cast(PreSubmissionAuditResult, audit_submission_gaps(
+            payer_name=self.payer_name,
+            criteria_engine=criteria_engine,
+            appeal_language_notes=appeal_notes,
+            cpt_code=self.cpt_code,
+            diagnosis_codes=self.diagnosis_codes,
+            drug_name=self.drug_name,
+            treatment_history=self.treatment_history,
+            clinical_notes=self.clinical_notes
+        ) by llm());
+
+        critical_gaps: list[str] = [];
+        for g in audit_result.gaps_critical {
+            critical_gaps.append(g);
+        }
+
+        if step_therapy_required and self.treatment_history == "" {
+            needle = "Step therapy documentation required";
+            has_step_gap = False;
+            for g in critical_gaps {
+                if g.find(needle) >= 0 {
+                    has_step_gap = True;
+                    break;
+                }
+            }
+            if not has_step_gap {
+                critical_gaps.append(
+                    "Step therapy documentation required — this payer requires documented failure of preferred alternatives"
+                );
+            }
+        }
+
+        gaps_rec: list[str] = [];
+        for r in audit_result.gaps_recommended {
+            gaps_rec.append(r);
+        }
+
+        gaps_all: list[str] = [];
+        for c in critical_gaps {
+            gaps_all.append(c);
+        }
+        for r in gaps_rec {
+            gaps_all.append(r);
+        }
+
+        submission_ready_final = audit_result.submission_ready;
+        if len(critical_gaps) > 0 {
+            submission_ready_final = False;
+        }
+
+        audit = PreSubmissionAudit(
+            audit_id=str(uuid.uuid4()),
+            payer_name=self.payer_name,
+            cpt_code=self.cpt_code,
+            criteria_engine=criteria_engine,
+            gaps_detected=gaps_all,
+            gaps_critical=critical_gaps,
+            gaps_recommended=gaps_rec,
+            submission_ready=submission_ready_final,
+            confidence_score=audit_result.confidence_score,
+            audit_timestamp=now,
+            estimated_approval_probability=audit_result.estimated_approval_probability
+        );
+        root ++> audit;
+
+        report {
+            "audit_id": jid(audit),
+            "payer_name": self.payer_name,
+            "cpt_code": self.cpt_code,
+            "gaps_critical": critical_gaps,
+            "gaps_recommended": gaps_rec,
+            "submission_ready": submission_ready_final,
+            "confidence_score": audit_result.confidence_score,
+            "estimated_approval_probability": audit_result.estimated_approval_probability,
+            "audit_summary": audit_result.audit_summary,
+            "criteria_engine": criteria_engine
         };
     }
 }
