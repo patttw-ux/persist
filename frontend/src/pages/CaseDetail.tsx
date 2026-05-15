@@ -2,6 +2,7 @@ import { AgentStep as AgentStepRow } from "@/components/AgentStep";
 import { AppHeader } from "@/components/AppHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { formatRelativeTime } from "@/lib/formatRelativeTime";
 import type {
@@ -95,6 +96,45 @@ function mergeStepStatus(
   return prev;
 }
 
+function CaseDetailPageSkeleton() {
+  return (
+    <div className="grid gap-6 lg:grid-cols-5">
+      <div className="space-y-4 lg:col-span-3">
+        <section className="rounded-lg border border-slate-200 bg-white p-6">
+          <Skeleton className="mb-4 h-4 w-48" />
+          <div className="grid grid-cols-2 gap-4">
+            <Skeleton className="h-8 w-56" />
+            <Skeleton className="h-4 w-36" />
+            <Skeleton className="h-4 w-52" />
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-6 w-24" />
+            <Skeleton className="h-6 w-32" />
+          </div>
+        </section>
+        <section className="rounded-lg border border-slate-200 bg-white p-6">
+          <Skeleton className="mb-4 h-4 w-40" />
+          <Skeleton className="h-6 w-3/4 max-w-md" />
+          <Skeleton className="mt-3 h-4 w-28" />
+          <Skeleton className="mt-4 h-16 w-full" />
+        </section>
+        <section className="rounded-lg border border-slate-200 bg-white p-6">
+          <Skeleton className="h-24 w-full" />
+        </section>
+      </div>
+      <div className="lg:col-span-2">
+        <div className="sticky top-20 overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <Skeleton className="h-12 w-full rounded-none bg-slate-900" />
+          <div className="space-y-2 px-4 py-4">
+            {Array.from({ length: 7 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full" />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ViabilityScoreDisplay({ percent }: { percent: number }) {
   const colorClass =
     percent > 70
@@ -112,6 +152,7 @@ export function CaseDetail() {
   const navigate = useNavigate();
   const { caseId } = useParams<{ caseId: string }>();
 
+  const [minLoadDone, setMinLoadDone] = useState(false);
   const [caseData, setCaseData] = useState<CaseDetail | null>(null);
   const [caseLoadError, setCaseLoadError] = useState<string | null>(null);
   const [steps, setSteps] = useState<AgentStepState[]>(createInitialSteps);
@@ -134,13 +175,29 @@ export function CaseDetail() {
       const msg =
         e instanceof Error ? e.message : "Failed to load case";
       setCaseLoadError(msg);
-      toast.error(msg);
+      toast.error(`Something went wrong — ${msg}`, {
+        duration: 5000,
+      });
     }
   }, [caseId]);
 
   useEffect(() => {
+    const t = window.setTimeout(() => setMinLoadDone(true), 800);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
     void loadCase();
   }, [loadCase]);
+
+  useEffect(() => {
+    if (caseData?.patient_name) {
+      document.title = `Persist — ${caseData.patient_name}`;
+    }
+    return () => {
+      document.title = "Persist";
+    };
+  }, [caseData?.patient_name]);
 
   const onStep = useCallback((incoming: AgentStepState) => {
     const idx = incoming.step - 1;
@@ -186,7 +243,9 @@ export function CaseDetail() {
       (err) => {
         setAgentStreaming(false);
         setAgentStreamError(err);
-        toast.error(err);
+        toast.error(`Something went wrong — ${err}`, {
+          duration: 5000,
+        });
       }
     );
 
@@ -243,11 +302,15 @@ export function CaseDetail() {
         }
         return next;
       });
-      toast.success("Appeal letter generated — ready to submit");
+      toast.success("Appeal letter generated — ready to submit", {
+        duration: 3000,
+      });
     } catch (e) {
       const msg =
         e instanceof Error ? e.message : "Failed to draft appeal";
-      toast.error(msg);
+      toast.error(`Something went wrong — ${msg}`, {
+        duration: 5000,
+      });
       setSteps((prev) => {
         const next = [...prev];
         const i = 6;
@@ -270,11 +333,15 @@ export function CaseDetail() {
     try {
       await api.submitAppeal(caseData.appeal.appeal_id);
       await loadCase();
-      toast.success("Appeal submitted");
+      toast.success("Appeal submitted to payer", {
+        duration: 3000,
+      });
     } catch (e) {
       const msg =
         e instanceof Error ? e.message : "Failed to submit appeal";
-      toast.error(msg);
+      toast.error(`Something went wrong — ${msg}`, {
+        duration: 5000,
+      });
     } finally {
       setAppealActionBusy(false);
     }
@@ -285,8 +352,14 @@ export function CaseDetail() {
       return;
     }
     void navigator.clipboard.writeText(caseData.appeal.full_letter);
-    toast.success("Letter copied to clipboard");
+    toast.success("Appeal letter copied to clipboard", {
+      duration: 3000,
+    });
   }, [caseData?.appeal?.full_letter]);
+
+  const showDetail = Boolean(caseData) && minLoadDone;
+  const showError = Boolean(caseLoadError) && minLoadDone && !caseData;
+  const showSkeleton = !showDetail && !showError;
 
   if (!caseId) {
     return (
@@ -315,15 +388,16 @@ export function CaseDetail() {
             Back to Queue
           </button>
 
-          {caseLoadError && !caseData ? (
-            <p className="text-sm text-red-600">{caseLoadError}</p>
-          ) : null}
-
-          <div className="grid gap-6 lg:grid-cols-5">
-            <div className="lg:col-span-3">
-              {caseData ? (
-                <>
-                  <section className="mb-4 rounded-lg border border-slate-200 bg-white p-6">
+          {showSkeleton ? (
+            <CaseDetailPageSkeleton />
+          ) : (
+            <div className="grid gap-6 lg:grid-cols-5">
+              <div className="lg:col-span-3">
+                {showError ? (
+                  <p className="text-sm text-red-600">{caseLoadError}</p>
+                ) : caseData ? (
+                  <>
+                    <section className="mb-4 rounded-lg border border-slate-200 bg-white p-6">
                     <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
                       Patient &amp; Insurance
                     </h2>
@@ -485,11 +559,7 @@ export function CaseDetail() {
                     </section>
                   ) : null}
                 </>
-              ) : (
-                !caseLoadError && (
-                  <p className="text-sm text-slate-500">Loading case…</p>
-                )
-              )}
+              ) : null}
             </div>
 
             <div className="lg:col-span-2">
@@ -586,6 +656,7 @@ export function CaseDetail() {
               </div>
             </div>
           </div>
+          )}
         </div>
       </main>
     </div>

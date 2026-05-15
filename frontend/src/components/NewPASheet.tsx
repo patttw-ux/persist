@@ -128,13 +128,18 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
         diagnosis_codes,
         treatment_history: form.treatment_history.trim(),
       });
-      toast.success("Prior auth submitted — Persist is monitoring");
+      toast.success("Prior auth submitted — Persist is now monitoring", {
+        duration: 3000,
+      });
       onOpenChange(false);
       onSuccess();
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Submission failed. Try again.";
       setSubmitError(message);
+      toast.error(`Something went wrong — ${message}`, {
+        duration: 5000,
+      });
     } finally {
       setSubmitting(false);
     }

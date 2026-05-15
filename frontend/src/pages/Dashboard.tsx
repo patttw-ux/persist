@@ -167,7 +167,9 @@ export function Dashboard() {
     } catch (e) {
       const message =
         e instanceof Error ? e.message : "Could not reach the server to load cases.";
-      toast.error(message);
+      toast.error(`Something went wrong — ${message}`, {
+        duration: 5000,
+      });
       setCases([]);
     } finally {
       setLoading(false);
@@ -177,6 +179,13 @@ export function Dashboard() {
   useEffect(() => {
     void loadCases();
   }, [loadCases]);
+
+  useEffect(() => {
+    document.title = "Persist — Prior Auth Queue";
+    return () => {
+      document.title = "Persist";
+    };
+  }, []);
 
   const kpi = useMemo(() => {
     const total = cases.length;
@@ -300,8 +309,8 @@ export function Dashboard() {
                 </button>
               </div>
 
-              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-                <table className="w-full table-fixed text-left text-sm">
+              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                <table className="w-full min-w-[720px] table-fixed text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50">
                       <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
