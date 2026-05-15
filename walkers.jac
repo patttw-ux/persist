@@ -1267,14 +1267,16 @@ async walker :pub agent_status_stream {
             "step": 1,
             "status": "running",
             "label": "Detecting authorization requirement",
-            "detail": "Checking CPT code " + req.cpt_code + " against payer criteria..."
+            "detail": "Checking PA rules for " + req.drug_name + " (CPT " + req.cpt_code + ") under " +
+                patient_case.payer_name + "..."
         };
         await asyncio.sleep(0.8);
         report {
             "step": 1,
             "status": "done",
             "label": "Authorization requirement confirmed",
-            "detail": "PA required for " + req.drug_name + " under " + patient_case.payer_name,
+            "detail": "PA required for " + req.drug_name + " (CPT " + req.cpt_code + ") under " +
+                patient_case.payer_name,
             "durationMs": 800
         };
 
@@ -1282,14 +1284,18 @@ async walker :pub agent_status_stream {
             "step": 2,
             "status": "running",
             "label": "Assembling clinical documentation",
-            "detail": "Pulling diagnosis codes, treatment history, and supporting evidence..."
+            "detail": "Indexing " + str(len(req.diagnosis_codes)) + " diagnosis code(s) and treatment history for " +
+                req.drug_name + "..."
         };
         await asyncio.sleep(1.2);
+        step2_done_detail: str = (str(len(req.diagnosis_codes)) + " diagnosis codes confirmed: " +
+            req.diagnosis_codes[0] + " | Treatment history documented") if req.diagnosis_codes
+            else "" + " | Treatment history documented";
         report {
             "step": 2,
             "status": "done",
             "label": "Clinical documentation assembled",
-            "detail": str(len(req.diagnosis_codes)) + " diagnosis codes, treatment history documented",
+            "detail": step2_done_detail,
             "durationMs": 1200
         };
 
@@ -1297,14 +1303,16 @@ async walker :pub agent_status_stream {
             "step": 3,
             "status": "running",
             "label": "Submitting to payer",
-            "detail": "Sending FHIR R4 Claim bundle to " + patient_case.payer_name + " via Claim/$submit..."
+            "detail": "Submitting FHIR R4 Claim/$submit to " + patient_case.payer_name + " — CPT " +
+                req.cpt_code + ", Member ID " + patient_case.member_id
         };
         await asyncio.sleep(1.0);
         report {
             "step": 3,
             "status": "done",
             "label": "Submitted to payer",
-            "detail": "FHIR bundle accepted by " + patient_case.payer_name,
+            "detail": "FHIR R4 Claim/$submit accepted by " + patient_case.payer_name + " — CPT " +
+                req.cpt_code + ", Member ID " + patient_case.member_id,
             "durationMs": 1000
         };
 
@@ -1314,15 +1322,15 @@ async walker :pub agent_status_stream {
                 "step": 4,
                 "status": "running",
                 "label": "Monitoring payer response",
-                "detail": "Tracking status — CMS 7-day standard deadline: " +
-                    (req.submitted_at[:10] if req.submitted_at else "pending")
+                "detail": "Monitoring " + patient_case.payer_name +
+                    " response — CMS-0057-F mandates 7-day standard response window"
             };
         } else {
             report {
                 "step": 4,
                 "status": "done",
                 "label": "Payer response received",
-                "detail": "Denial received — Persist is analyzing...",
+                "detail": "Denial received from " + patient_case.payer_name + " — Persist is analyzing...",
                 "durationMs": 0
             };
 
@@ -1332,14 +1340,16 @@ async walker :pub agent_status_stream {
                 "step": 5,
                 "status": "running",
                 "label": "Parsing denial reason",
-                "detail": "Extracting criterion that failed from denial letter..."
+                "detail": "Extracting failed criterion for " + denial.denial_type.replace("_", " ") +
+                    " denial from " + patient_case.payer_name + "..."
             };
             await asyncio.sleep(1.5);
             report {
                 "step": 5,
                 "status": "done",
                 "label": "Denial parsed",
-                "detail": denial.denial_type + ": " + denial.criterion_failed[:80] + "...",
+                "detail": "Denial type: " + denial.denial_type + " — criterion: " +
+                    denial.criterion_failed[:60] + "...",
                 "durationMs": 1500
             };
 
@@ -1347,27 +1357,34 @@ async walker :pub agent_status_stream {
                 "step": 6,
                 "status": "running",
                 "label": "Scoring appeal viability",
-                "detail": "Applying AMA overturn data and payer-specific pattern analysis..."
+                "detail": "Scoring appeal for " + denial.denial_type.replace("_", " ") + " denial against " +
+                    patient_case.payer_name + " AMA 2024 overturn benchmarks..."
             };
             await asyncio.sleep(1.0);
-            score_pct: int = int(denial.appeal_viability_score * 100);
+            ama_rate: str = "82%" if denial.denial_type == "medical_necessity" else (
+                "78%" if denial.denial_type == "step_therapy" else (
+                    "95%" if denial.denial_type == "administrative" else "5%"
+                )
+            );
             report {
                 "step": 6,
                 "status": "done",
                 "label": "Appeal viability scored",
-                "detail": str(score_pct) + "% viability — " +
-                    ("Highly viable — Persist will fight this" if denial.appeal_viable else "Low viability — escalating to review"),
+                "detail": str(int(denial.appeal_viability_score * 100)) + "% viability — " +
+                    denial.denial_type + " denials have " + ama_rate + " overturn rate per AMA 2024",
                 "viability_score": denial.appeal_viability_score,
                 "durationMs": 1000
             };
 
             appeals: list[AppealRecord] = [denial->:HasAppeal:->][?:AppealRecord];
             if appeals {
+                appeal: AppealRecord = appeals[0];
                 report {
                     "step": 7,
                     "status": "done",
                     "label": "Appeal letter drafted and ready",
-                    "detail": "Clinical justification letter ready for submission",
+                    "detail": "Appeal letter drafted — " + str(len(appeal.full_letter)) + " characters, citing " +
+                        str(len(appeal.evidence_cited)) + " clinical evidence items",
                     "durationMs": 0
                 };
             } elif denial.appeal_viable {
