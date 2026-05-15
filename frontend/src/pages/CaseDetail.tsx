@@ -8,7 +8,9 @@ import { api } from "@/lib/api";
 import { formatRelativeTime } from "@/lib/formatRelativeTime";
 import type {
   AgentStep as AgentStepState,
+  AppealData,
   CaseDetail,
+  DenialData,
   DenialType,
   PAStatus,
   StepStatus,
@@ -16,12 +18,18 @@ import type {
 import { createAgentStream } from "@/lib/websocket";
 import {
   AlertCircle,
+  BookOpen,
+  Brain,
   Building2,
   CheckCircle2,
   ChevronLeft,
   Clock,
   Copy,
+  FileText,
   Loader2,
+  Send,
+  Shield,
+  Trophy,
   Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -40,19 +48,6 @@ const PA_STATUS_SET = new Set<string>([
 ]);
 
 function normalizeStatus(status: string): PAStatus {
-  if (PA_STATUS_SET.has(status)) {
-    return status as PAStatus;
-  }
-  return "expired";
-}
-
-function normalizeAppealStatusForBadge(status: string): PAStatus {
-  if (status === "drafted") {
-    return "appeal_drafted";
-  }
-  if (status === "submitted") {
-    return "appeal_submitted";
-  }
   if (PA_STATUS_SET.has(status)) {
     return status as PAStatus;
   }
@@ -99,6 +94,352 @@ function mergeStepStatus(
   return prev;
 }
 
+function formatAppealFiledDate(iso: string): string {
+  const trimmed = iso.trim();
+  if (!trimmed) {
+    return "—";
+  }
+  const d = new Date(trimmed);
+  if (Number.isNaN(d.getTime())) {
+    return "—";
+  }
+  return d.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function paragraphHasClinicalCue(text: string): boolean {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("das28") ||
+    lower.includes("methotrexate") ||
+    lower.includes("icd-10") ||
+    /\bcpt\b/i.test(text)
+  );
+}
+
+function denialTypeInsight(dt: DenialType | undefined): string {
+  switch (dt) {
+    case "step_therapy":
+      return "Step therapy denials have 78% overturn rate when properly documented";
+    case "medical_necessity":
+      return "Medical necessity denials have 82% overturn rate with clinical evidence";
+    case "administrative":
+      return "Administrative denials have 95% overturn rate — documentation fix required";
+    default:
+      return "Appeals with complete clinical documentation significantly improve overturn likelihood.";
+  }
+}
+
+function viabilityScoreColorClasses(
+  percent: number | null
+): { text: string; fill: string } {
+  if (percent === null) {
+    return { text: "text-slate-400", fill: "bg-slate-300" };
+  }
+  if (percent > 70) {
+    return { text: "text-green-600", fill: "bg-green-600" };
+  }
+  if (percent >= 40) {
+    return { text: "text-amber-600", fill: "bg-amber-600" };
+  }
+  return { text: "text-red-600", fill: "bg-red-600" };
+}
+
+function AppealLetterHero({
+  appeal,
+  patientName,
+  memberId,
+  onCopy,
+  onSubmit,
+  submitBusy,
+}: {
+  appeal: AppealData;
+  patientName: string;
+  memberId: string;
+  onCopy: () => void;
+  onSubmit: () => void;
+  submitBusy: boolean;
+}) {
+  const paragraphs = appeal.full_letter
+    .split(/\n\n/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+  const appealRefShort =
+    appeal.appeal_id.length >= 8
+      ? appeal.appeal_id.slice(0, 8).toUpperCase()
+      : appeal.appeal_id.toUpperCase();
+
+  return (
+    <section className="mb-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between bg-slate-900 px-6 py-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-y-1">
+          <FileText
+            className="mr-2 h-5 w-5 shrink-0 text-blue-400"
+            aria-hidden
+          />
+          <span className="text-sm font-semibold text-white">
+            Prior Authorization Appeal
+          </span>
+          <span className="ml-2 rounded bg-blue-900 px-2 py-0.5 text-xs text-blue-200">
+            {appeal.appeal_type}
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center">
+          {appeal.status === "submitted" ? (
+            <span className="flex items-center text-xs text-green-400">
+              <CheckCircle2 className="mr-1 h-4 w-4 shrink-0" aria-hidden />
+              Submitted to Payer
+            </span>
+          ) : appeal.status === "drafted" ? (
+            <span className="flex items-center text-xs text-amber-400">
+              <Clock className="mr-1 h-4 w-4 shrink-0" aria-hidden />
+              Ready to Submit
+            </span>
+          ) : (
+            <span className="flex items-center text-xs text-amber-400">
+              <Clock className="mr-1 h-4 w-4 shrink-0" aria-hidden />
+              Appeal in progress
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-4 border-b border-slate-200 bg-slate-50 px-6 py-4 sm:flex-row sm:justify-between">
+        <div className="space-y-0.5">
+          <p className="text-xs font-bold tracking-widest text-slate-400">
+            PERSIST HEALTH SOLUTIONS
+          </p>
+          <p className="text-xs text-slate-400">
+            Autonomous Prior Authorization Agent
+          </p>
+          <p className="text-xs text-slate-400">
+            persist.health | AI-Powered Appeals
+          </p>
+        </div>
+        <div className="space-y-0.5 text-right sm:ml-auto">
+          <p className="text-xs text-slate-600">
+            Date: {formatAppealFiledDate(appeal.filed_at)}
+          </p>
+          <p className="font-mono text-xs text-slate-600">
+            Re: Appeal #{appealRefShort}
+          </p>
+          <p className="text-xs text-slate-600">Patient: {patientName}</p>
+          <p className="font-mono text-xs text-slate-600">
+            Member ID: {memberId}
+          </p>
+        </div>
+      </div>
+
+      <div className="border-b border-slate-200 bg-white px-6 py-3">
+        <p className="text-sm font-semibold text-slate-900">
+          RE: {appeal.subject_line}
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-blue-100 bg-blue-50 px-6 py-3">
+        <span className="flex items-center gap-1.5">
+          <Shield className="h-4 w-4 shrink-0 text-blue-500" aria-hidden />
+          <span className="text-xs font-medium text-blue-700">
+            81.7% Appeal Overturn Rate
+          </span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <Zap className="h-4 w-4 shrink-0 text-blue-500" aria-hidden />
+          <span className="text-xs font-medium text-blue-700">
+            Generated in &lt;60 seconds
+          </span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <Brain className="h-4 w-4 shrink-0 text-blue-500" aria-hidden />
+          <span className="text-xs font-medium text-blue-700">
+            AI-Drafted Clinical Justification
+          </span>
+        </span>
+      </div>
+
+      <div className="px-6 py-5">
+        {paragraphs.length === 0 ? (
+          <p className="text-sm text-slate-500">No letter body.</p>
+        ) : (
+          paragraphs.map((para, index) => {
+            const base =
+              "mb-4 text-sm leading-relaxed text-slate-700 last:mb-0";
+            const opening = index === 0 ? " font-medium text-slate-900" : "";
+            const highlighted = paragraphHasClinicalCue(para);
+            if (highlighted) {
+              return (
+                <div
+                  key={`${index}-${para.slice(0, 24)}`}
+                  className={`mb-4 rounded-r border-l-2 border-blue-300 bg-blue-50 py-1 pl-3 text-sm leading-relaxed text-slate-700 last:mb-0${opening}`}
+                >
+                  {para}
+                </div>
+              );
+            }
+            return (
+              <p
+                key={`${index}-${para.slice(0, 24)}`}
+                className={`${base}${opening}`}
+              >
+                {para}
+              </p>
+            );
+          })
+        )}
+      </div>
+
+      {appeal.evidence_cited && appeal.evidence_cited.length > 0 ? (
+        <div className="border-t border-slate-200 px-6 py-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+            Clinical Evidence Cited
+          </p>
+          <div>
+            {appeal.evidence_cited.map((cite) => (
+              <span
+                key={cite}
+                className="mb-1 mr-1 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700"
+              >
+                <BookOpen className="h-3 w-3 shrink-0" aria-hidden />
+                {cite}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <button
+          type="button"
+          onClick={onCopy}
+          className="inline-flex items-center gap-2 rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200/60"
+        >
+          <Copy className="h-4 w-4 shrink-0" aria-hidden />
+          Copy Letter
+        </button>
+        <div className="flex items-center gap-2 sm:justify-end">
+          {appeal.status === "drafted" ? (
+            <button
+              type="button"
+              disabled={submitBusy}
+              onClick={onSubmit}
+              className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 font-medium text-white hover:bg-green-700 disabled:opacity-50"
+            >
+              <Send className="h-4 w-4 shrink-0" aria-hidden />
+              Submit Appeal to Payer
+            </button>
+          ) : appeal.status === "submitted" ? (
+            <span className="inline-flex items-center gap-2 rounded-lg bg-green-100 px-4 py-2 text-green-700">
+              <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
+              Appeal Submitted
+            </span>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AppealViabilityCard({
+  viabilityPercent,
+  denial,
+  appeal,
+  appealActionBusy,
+  onRunAgent,
+}: {
+  viabilityPercent: number | null;
+  denial: DenialData | null | undefined;
+  appeal: AppealData | null | undefined;
+  appealActionBusy: boolean;
+  onRunAgent: () => void;
+}) {
+  const [barFillPct, setBarFillPct] = useState(0);
+  const targetWidth =
+    viabilityPercent === null
+      ? 0
+      : Math.min(100, Math.max(0, viabilityPercent));
+
+  const { text: scoreTextClass, fill: barFillClass } =
+    viabilityScoreColorClasses(viabilityPercent);
+
+  useEffect(() => {
+    setBarFillPct(0);
+    const id = requestAnimationFrame(() => {
+      setBarFillPct(targetWidth);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [targetWidth]);
+
+  const showRunCta = Boolean(denial?.appeal_viable && !appeal);
+  const showFoughtCta = appeal?.status === "submitted";
+
+  return (
+    <div className="mx-4 mb-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+        Appeal Viability Analysis
+      </p>
+
+      <div className="mb-3 flex flex-wrap items-end gap-1">
+        {viabilityPercent === null ? (
+          <span className={`text-5xl font-bold ${scoreTextClass}`}>—</span>
+        ) : (
+          <>
+            <span className={`text-5xl font-bold ${scoreTextClass}`}>
+              {viabilityPercent}
+            </span>
+            <span className={`text-2xl font-bold ${scoreTextClass}`}>%</span>
+            <span className="mb-1 ml-2 self-end text-xs text-slate-500">
+              Viability Score
+            </span>
+          </>
+        )}
+      </div>
+
+      <div className="mb-3 h-2 overflow-hidden rounded-full bg-slate-100">
+        <div
+          className={`h-full rounded-full transition-all duration-1000 ease-out ${barFillClass}`}
+          style={{ width: `${barFillPct}%` }}
+        />
+      </div>
+
+      <p className="text-xs text-slate-400">
+        AMA 2024 Survey | 81.7% Overturn Rate | n=1,000 Physicians
+      </p>
+
+      <p className="mt-3 rounded bg-slate-50 p-2 text-xs text-slate-600">
+        {denialTypeInsight(denial?.denial_type)}
+      </p>
+
+      {appeal?.status === "drafted" ? (
+        <p className="mt-3 text-xs text-slate-600">
+          Appeal drafted — submit when ready in the letter below.
+        </p>
+      ) : null}
+
+      {showRunCta ? (
+        <button
+          type="button"
+          disabled={appealActionBusy}
+          onClick={onRunAgent}
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          <Zap className="h-4 w-4 shrink-0" aria-hidden />
+          Run Persist Agent — Fight This Denial
+        </button>
+      ) : null}
+
+      {showFoughtCta ? (
+        <div className="mt-4 flex w-full cursor-default items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 font-medium text-white">
+          <Trophy className="h-4 w-4 shrink-0" aria-hidden />
+          Persist Fought This Denial
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function CaseDetailPageSkeleton() {
   return (
     <div className="grid gap-6 lg:grid-cols-5">
@@ -135,19 +476,6 @@ function CaseDetailPageSkeleton() {
         </div>
       </div>
     </div>
-  );
-}
-
-function ViabilityScoreDisplay({ percent }: { percent: number }) {
-  const colorClass =
-    percent > 70
-      ? "text-green-600"
-      : percent >= 40
-        ? "text-amber-600"
-        : "text-red-600";
-
-  return (
-    <p className={`mt-1 text-4xl font-bold ${colorClass}`}>{percent}%</p>
   );
 }
 
@@ -595,42 +923,14 @@ export function CaseDetail() {
                   ) : null}
 
                   {caseData.appeal ? (
-                    <section className="mb-4 rounded-lg border border-slate-200 bg-white p-6">
-                      <div className="mb-4 flex items-center gap-2">
-                        <h2 className="text-sm font-semibold text-slate-900">
-                          Appeal Letter
-                        </h2>
-                        <div className="ml-auto flex items-center gap-2">
-                          <StatusBadge
-                            status={normalizeAppealStatusForBadge(
-                              caseData.appeal.status
-                            )}
-                            size="sm"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleCopyLetter}
-                            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-slate-700 hover:bg-slate-100"
-                          >
-                            <Copy className="h-3.5 w-3.5" aria-hidden />
-                            Copy Letter
-                          </button>
-                        </div>
-                      </div>
-                      <div className="max-h-80 overflow-y-auto whitespace-pre-wrap rounded border border-slate-200 bg-slate-50 p-4 font-mono text-xs leading-relaxed text-slate-700">
-                        {caseData.appeal.full_letter}
-                      </div>
-                      {caseData.appeal.status === "drafted" ? (
-                        <button
-                          type="button"
-                          disabled={appealActionBusy}
-                          onClick={handleSubmitAppeal}
-                          className="mt-4 w-full rounded-md bg-green-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
-                        >
-                          Submit Appeal to Payer
-                        </button>
-                      ) : null}
-                    </section>
+                    <AppealLetterHero
+                      appeal={caseData.appeal}
+                      patientName={caseData.patient_name}
+                      memberId={caseData.member_id}
+                      onCopy={handleCopyLetter}
+                      onSubmit={() => void handleSubmitAppeal()}
+                      submitBusy={appealActionBusy}
+                    />
                   ) : null}
                 </>
               ) : null}
@@ -697,57 +997,29 @@ export function CaseDetail() {
                 </div>
 
                 {caseData?.status === "denied" && !caseData.appeal ? (
-                  <div className="mx-4 mb-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                    {viabilityPercent !== null ? (
-                      <>
-                        <p className="text-sm text-slate-500">
-                          Appeal Viability Score
-                        </p>
-                        <ViabilityScoreDisplay percent={viabilityPercent} />
-                        <p className="mt-1 text-xs text-slate-400">
-                          Based on AMA data: 81.7% of properly appealed denials
-                          are overturned
-                        </p>
-                      </>
-                    ) : null}
-                    <button
-                      type="button"
-                      disabled={appealActionBusy}
-                      onClick={() => {
-                        void handleAutoProcess();
-                      }}
-                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      <Zap className="h-4 w-4" aria-hidden />
-                      Run Persist Agent — Fight This Denial
-                    </button>
-                  </div>
+                  <AppealViabilityCard
+                    viabilityPercent={viabilityPercent}
+                    denial={caseData.denial ?? undefined}
+                    appeal={undefined}
+                    appealActionBusy={appealActionBusy}
+                    onRunAgent={() => {
+                      void handleAutoProcess();
+                    }}
+                  />
                 ) : null}
 
                 {stepSixDone &&
                 viabilityPercent !== null &&
                 !(caseData?.status === "denied" && !caseData.appeal) ? (
-                  <div className="mx-4 mb-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-sm text-slate-500">
-                      Appeal Viability Score
-                    </p>
-                    <ViabilityScoreDisplay percent={viabilityPercent} />
-                    <p className="mt-1 text-xs text-slate-400">
-                      Based on AMA data: 81.7% of properly appealed denials are
-                      overturned
-                    </p>
-                    {caseData?.appeal ? (
-                      <div className="mt-3 flex items-center gap-2 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
-                        <CheckCircle2
-                          className="h-4 w-4 shrink-0"
-                          aria-hidden
-                        />
-                        {caseData.appeal.status === "drafted"
-                          ? "Appeal drafted — submit when ready below"
-                          : "Appeal submitted — Persist fought this denial"}
-                      </div>
-                    ) : null}
-                  </div>
+                  <AppealViabilityCard
+                    viabilityPercent={viabilityPercent}
+                    denial={caseData?.denial ?? undefined}
+                    appeal={caseData?.appeal ?? undefined}
+                    appealActionBusy={appealActionBusy}
+                    onRunAgent={() => {
+                      void handleAutoProcess();
+                    }}
+                  />
                 ) : null}
               </div>
             </div>
