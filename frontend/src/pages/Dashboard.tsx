@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { formatRelativeTime } from "@/lib/formatRelativeTime";
 import type { PACase, PAStatus } from "@/lib/types";
 import {
+  Activity,
   CheckCircle2,
   Clock,
   FileText,
@@ -16,7 +17,7 @@ import {
   XCircle,
 } from "lucide-react";
 import type { ComponentType } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -69,7 +70,26 @@ function KpiCard({
   );
 }
 
-function ActionCell({ c, navigate }: { c: PACase; navigate: (to: string) => void }) {
+function ActionCell({
+  c,
+  navigate,
+  agentRunning,
+}: {
+  c: PACase;
+  navigate: (to: string) => void;
+  agentRunning: boolean;
+}) {
+  if (agentRunning) {
+    return (
+      <span className="flex items-center gap-1 text-xs text-blue-700">
+        <Activity
+          className="h-3.5 w-3.5 shrink-0 animate-pulse text-blue-600"
+          aria-hidden
+        />
+        Agent Running
+      </span>
+    );
+  }
   if (c.status === "denied" && c.appeal_viable) {
     return (
       <button
@@ -154,6 +174,49 @@ export function Dashboard() {
   const [cases, setCases] = useState<PACase[]>([]);
   const [loading, setLoading] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [autoRunningIds, setAutoRunningIds] = useState<string[]>([]);
+  const autoQueuedRef = useRef<Set<string>>(new Set());
+
+  const refreshCasesQuiet = useCallback(async () => {
+    try {
+      const data = await api.getAllCases();
+      setCases(data.map(normalizeCase));
+    } catch {
+      /* silent background refresh only */
+    }
+  }, []);
+
+  const scheduleDeniedAutoProcess = useCallback(
+    (list: PACase[]) => {
+      const targets = list.filter(
+        (c) =>
+          c.status === "denied" && c.has_denial && !c.has_appeal
+      );
+      for (const c of targets) {
+        if (autoQueuedRef.current.has(c.case_id)) {
+          continue;
+        }
+        autoQueuedRef.current.add(c.case_id);
+        setAutoRunningIds((prev) =>
+          prev.includes(c.case_id) ? prev : [...prev, c.case_id]
+        );
+
+        void api
+          .autoProcessCase({ case_id: c.case_id, auto_submit_appeal: true })
+          .catch(() => {
+            toast.error(`Something went wrong — auto-process failed for ${c.patient_name}`, {
+              duration: 4000,
+            });
+          })
+          .finally(() => {
+            autoQueuedRef.current.delete(c.case_id);
+            setAutoRunningIds((prev) => prev.filter((id) => id !== c.case_id));
+            void refreshCasesQuiet();
+          });
+      }
+    },
+    [refreshCasesQuiet]
+  );
 
   const loadCases = useCallback(async () => {
     setLoading(true);
@@ -163,7 +226,9 @@ export function Dashboard() {
         await api.seedDemoData();
         data = await api.getAllCases();
       }
-      setCases(data.map(normalizeCase));
+      const normalized = data.map(normalizeCase);
+      setCases(normalized);
+      scheduleDeniedAutoProcess(normalized);
     } catch (e) {
       const message =
         e instanceof Error ? e.message : "Could not reach the server to load cases.";
@@ -174,7 +239,7 @@ export function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [scheduleDeniedAutoProcess]);
 
   useEffect(() => {
     void loadCases();
@@ -365,7 +430,11 @@ export function Dashboard() {
                             <StatusBadge status={c.status} size="sm" />
                           </td>
                           <td className="px-4 py-3">
-                            <ActionCell c={c} navigate={navigate} />
+                            <ActionCell
+                              c={c}
+                              navigate={navigate}
+                              agentRunning={autoRunningIds.includes(c.case_id)}
+                            />
                           </td>
                         </tr>
                       ))}

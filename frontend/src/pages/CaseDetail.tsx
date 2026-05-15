@@ -20,6 +20,7 @@ import {
   ChevronLeft,
   Copy,
   Loader2,
+  Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -162,6 +163,7 @@ export function CaseDetail() {
     number | null
   >(null);
   const [appealActionBusy, setAppealActionBusy] = useState(false);
+  const [agentStreamKey, setAgentStreamKey] = useState(0);
 
   const loadCase = useCallback(async () => {
     if (!caseId) {
@@ -250,7 +252,7 @@ export function CaseDetail() {
     );
 
     return cleanup;
-  }, [caseId, onStep]);
+  }, [caseId, onStep, agentStreamKey]);
 
   const completedSteps = useMemo(
     () => steps.filter((s) => s.status === "done").length,
@@ -271,59 +273,84 @@ export function CaseDetail() {
     return null;
   }, [latestViabilityScore, caseData?.denial?.appeal_viability_score]);
 
-  const handleGenerateAppeal = useCallback(async () => {
-    if (!caseId) {
+  const handleAutoProcess = useCallback(async () => {
+    if (!caseId || !caseData) {
       return;
     }
     setAppealActionBusy(true);
-    setSteps((prev) => {
-      const next = [...prev];
-      const i = 6;
-      const row = next[i];
-      if (row) {
-        next[i] = { ...row, status: "running" };
-      }
-      return next;
-    });
+    setAgentStreamError(null);
+    setAgentStreaming(true);
+    setSteps(createInitialSteps());
+    setAgentStreamKey((k) => k + 1);
     try {
-      await api.draftAppeal({ case_id: caseId });
+      const res = await api.autoProcessCase({
+        case_id: caseId,
+        denial_text: caseData.denial?.raw_denial_text,
+        denial_date: caseData.denial?.denial_date,
+        auto_submit_appeal: true,
+      });
+
+      if (typeof res.error === "string" && res.step === undefined) {
+        toast.error(res.error, { duration: 5000 });
+        return;
+      }
+
       await loadCase();
-      setSteps((prev) => {
-        const next = [...prev];
-        const i = 6;
-        const row = next[i];
-        if (row) {
-          next[i] = {
-            ...row,
-            status: "done",
-            label: row.label,
-            detail: "Appeal letter ready for submission",
-          };
-        }
-        return next;
-      });
-      toast.success("Appeal letter generated — ready to submit", {
-        duration: 3000,
-      });
+
+      switch (res.step) {
+        case "appeal_submitted":
+          toast.success(
+            "Persist autonomously fought and submitted your appeal",
+            { duration: 4000 }
+          );
+          break;
+        case "appeal_drafted":
+          toast.success("Persist drafted appeal — ready for physician review", {
+            duration: 4000,
+          });
+          break;
+        case "escalate":
+          toast.warning(
+            res.message ??
+              "Low viability — Persist recommends peer-to-peer review",
+            { duration: 4000 }
+          );
+          break;
+        case "complete":
+          toast.info(res.message ?? "Appeal already on file", {
+            duration: 3000,
+          });
+          break;
+        case "monitoring":
+          toast.info(res.message ?? "Persist is monitoring this case", {
+            duration: 4000,
+          });
+          break;
+        case "detection":
+          toast.error(
+            typeof res.error === "string"
+              ? res.error
+              : typeof res.message === "string"
+                ? res.message
+                : "Case processing failed",
+            { duration: 5000 }
+          );
+          break;
+        default:
+          toast.success(res.message ?? "Persist updated this case.", {
+            duration: 3000,
+          });
+      }
     } catch (e) {
       const msg =
-        e instanceof Error ? e.message : "Failed to draft appeal";
+        e instanceof Error ? e.message : "Failed to run Persist agent";
       toast.error(`Something went wrong — ${msg}`, {
         duration: 5000,
-      });
-      setSteps((prev) => {
-        const next = [...prev];
-        const i = 6;
-        const row = next[i];
-        if (row) {
-          next[i] = { ...row, status: "error" };
-        }
-        return next;
       });
     } finally {
       setAppealActionBusy(false);
     }
-  }, [caseId, loadCase]);
+  }, [caseId, caseData, loadCase]);
 
   const handleSubmitAppeal = useCallback(async () => {
     if (!caseId || !caseData?.appeal) {
@@ -622,7 +649,37 @@ export function CaseDetail() {
                   ))}
                 </div>
 
-                {stepSixDone && viabilityPercent !== null ? (
+                {caseData?.status === "denied" && !caseData.appeal ? (
+                  <div className="mx-4 mb-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    {viabilityPercent !== null ? (
+                      <>
+                        <p className="text-sm text-slate-500">
+                          Appeal Viability Score
+                        </p>
+                        <ViabilityScoreDisplay percent={viabilityPercent} />
+                        <p className="mt-1 text-xs text-slate-400">
+                          Based on AMA data: 81.7% of properly appealed denials
+                          are overturned
+                        </p>
+                      </>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={appealActionBusy}
+                      onClick={() => {
+                        void handleAutoProcess();
+                      }}
+                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      <Zap className="h-4 w-4" aria-hidden />
+                      Run Persist Agent — Fight This Denial
+                    </button>
+                  </div>
+                ) : null}
+
+                {stepSixDone &&
+                viabilityPercent !== null &&
+                !(caseData?.status === "denied" && !caseData.appeal) ? (
                   <div className="mx-4 mb-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
                     <p className="text-sm text-slate-500">
                       Appeal Viability Score
@@ -632,23 +689,15 @@ export function CaseDetail() {
                       Based on AMA data: 81.7% of properly appealed denials are
                       overturned
                     </p>
-                    {caseData?.denial?.appeal_viable && !caseData.appeal ? (
-                      <button
-                        type="button"
-                        disabled={appealActionBusy}
-                        onClick={handleGenerateAppeal}
-                        className="mt-3 w-full rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                      >
-                        Generate Appeal Letter
-                      </button>
-                    ) : null}
                     {caseData?.appeal ? (
                       <div className="mt-3 flex items-center gap-2 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
                         <CheckCircle2
                           className="h-4 w-4 shrink-0"
                           aria-hidden
                         />
-                        Appeal Ready to Submit
+                        {caseData.appeal.status === "drafted"
+                          ? "Appeal drafted — submit when ready below"
+                          : "Appeal submitted — Persist fought this denial"}
                       </div>
                     ) : null}
                   </div>

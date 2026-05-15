@@ -237,6 +237,179 @@ walker:pub submit_appeal {
     }
 }
 
+walker:pub auto_process_case {
+    has case_id: str;
+    has denial_text: str = "";
+    has denial_date: str = "";
+    has auto_submit_appeal: bool = True;
+
+    can orchestrate with Root entry {
+        now: str = datetime.now().isoformat();
+        patient_case = cast(PatientCase, &self.case_id);
+
+        requests: list[PARequest] = [patient_case->:HasRequest:->][?:PARequest];
+        if not requests {
+            report {"error": "No PA request found", "step": "detection"};
+            disengage;
+        }
+        req: PARequest = requests[0];
+
+        denials: list[DenialRecord] = [req->:HasDenial:->][?:DenialRecord];
+
+        denial: DenialRecord;
+
+        if denials {
+            denial = denials[0];
+            appeals: list[AppealRecord] = [denial->:HasAppeal:->][?:AppealRecord];
+            if appeals {
+                existing: AppealRecord = appeals[0];
+                report {
+                    "step": "complete",
+                    "message": "Appeal already on file for this denial",
+                    "appeal_id": jid(existing),
+                    "status": existing.status,
+                };
+                disengage;
+            }
+        }
+
+        if not denials {
+            if not self.denial_text {
+                report {
+                    "step": "monitoring",
+                    "message": "Persist is monitoring this case — submit denial text when received",
+                };
+                disengage;
+            }
+
+            payer_name: str = patient_case.payer_name;
+
+            analysis = cast(DenialAnalysis, analyze_denial(
+                denial_text=self.denial_text,
+                payer_name=payer_name,
+                cpt_code=req.cpt_code,
+                patient_diagnosis=req.diagnosis_codes[0] if req.diagnosis_codes else ""
+            ) by llm());
+
+            denial_type_new: str = analysis.denial_type;
+            base_score: float = 0.05;
+            if denial_type_new == "medical_necessity" {
+                base_score = 0.82;
+            } elif denial_type_new == "step_therapy" {
+                base_score = 0.78;
+            } elif denial_type_new == "administrative" {
+                base_score = 0.95;
+            }
+
+            docs_available: list[str] = ["physician_notes", "lab_results", "treatment_history"];
+            llm_score = cast(float, score_appeal_viability(
+                denial_type=denial_type_new,
+                criterion_failed=analysis.criterion_failed,
+                documentation_available=docs_available
+            ) by llm());
+
+            final_score: float = (base_score * 0.6) + (llm_score * 0.4);
+            is_viable: bool = final_score > 0.5;
+
+            date_val: str = self.denial_date if self.denial_date else now[:10];
+
+            denial = DenialRecord(
+                denial_id=str(uuid.uuid4()),
+                raw_denial_text=self.denial_text,
+                denial_type=analysis.denial_type,
+                criterion_failed=analysis.criterion_failed,
+                missing_documentation=analysis.missing_documentation,
+                appeal_strategy=analysis.appeal_strategy,
+                denial_reason_summary=analysis.denial_reason_summary,
+                appeal_viability_score=final_score,
+                appeal_viable=is_viable,
+                denial_date=date_val,
+            );
+            req +>:HasDenial:+> denial;
+            req.status = "denied";
+        }
+
+        is_viable_effective: bool = denial.appeal_viable;
+
+        if not is_viable_effective {
+            report {
+                "step": "escalate",
+                "message": "Low viability — escalating to peer-to-peer review",
+                "appeal_viable": False,
+                "viability_score": denial.appeal_viability_score,
+            };
+            disengage;
+        }
+
+        evidence: str = req.treatment_history;
+
+        analysis_obj: DenialAnalysis = DenialAnalysis(
+            denial_type=denial.denial_type,
+            criterion_failed=denial.criterion_failed,
+            missing_documentation=denial.missing_documentation,
+            appeal_strategy=denial.appeal_strategy,
+            denial_reason_summary=denial.denial_reason_summary,
+        );
+
+        letter = cast(AppealLetter, draft_appeal_letter(
+            denial_analysis=analysis_obj,
+            patient_name=patient_case.patient_name,
+            drug_or_service=req.drug_name,
+            diagnosis=req.diagnosis_codes[0] if req.diagnosis_codes else "",
+            treatment_history=req.treatment_history,
+            clinical_evidence=evidence,
+        ) by llm());
+
+        if self.auto_submit_appeal {
+            appeal = AppealRecord(
+                appeal_id=str(uuid.uuid4()),
+                subject_line=letter.subject_line,
+                opening_paragraph=letter.opening_paragraph,
+                clinical_justification=letter.clinical_justification,
+                evidence_cited=letter.evidence_cited,
+                closing_paragraph=letter.closing_paragraph,
+                full_letter=letter.full_letter,
+                appeal_type=denial.denial_type,
+                status="submitted",
+                submitted_at=now,
+                filed_at=now,
+            );
+            denial +>:HasAppeal:+> appeal;
+            req.status = "appeal_submitted";
+
+            report {
+                "step": "appeal_submitted",
+                "appeal_id": jid(appeal),
+                "subject_line": letter.subject_line,
+                "message": "Persist autonomously drafted and submitted appeal",
+            };
+        } else {
+            appeal = AppealRecord(
+                appeal_id=str(uuid.uuid4()),
+                subject_line=letter.subject_line,
+                opening_paragraph=letter.opening_paragraph,
+                clinical_justification=letter.clinical_justification,
+                evidence_cited=letter.evidence_cited,
+                closing_paragraph=letter.closing_paragraph,
+                full_letter=letter.full_letter,
+                appeal_type=denial.denial_type,
+                status="drafted",
+                submitted_at="",
+                filed_at=now,
+            );
+            denial +>:HasAppeal:+> appeal;
+            req.status = "appeal_drafted";
+
+            report {
+                "step": "appeal_drafted",
+                "appeal_id": jid(appeal),
+                "subject_line": letter.subject_line,
+                "message": "Persist drafted appeal — ready for physician review",
+            };
+        }
+    }
+}
+
 walker:pub get_all_cases {
     can fetch with Root entry {
         all_cases: list[PatientCase] = [root-->][?:PatientCase];
