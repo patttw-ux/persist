@@ -1,4 +1,4 @@
-import from models {
+﻿import from models {
     PatientCase, PARequest, DenialRecord, AppealRecord, MonitorStatus,
     PayerProfile, DenialPattern, PreSubmissionAudit,
     HasRequest, HasDenial, HasAppeal, HasMonitor, HasPayerProfile,
@@ -6,7 +6,7 @@ import from models {
 }
 import from abilities {
     DenialAnalysis, AppealLetter, analyze_denial, draft_appeal_letter,
-    score_appeal_viability, PreSubmissionAuditResult, audit_submission_gaps
+    score_appeal_viability
 }
 import from datetime { datetime }
 import from typing { cast }
@@ -122,7 +122,7 @@ walker:pub audit_prior_auth {
             drug_name=self.drug_name,
             treatment_history=self.treatment_history,
             clinical_notes=self.clinical_notes
-        ) by llm());
+        ));
 
         critical_gaps: list[str] = [];
         for g in audit_result.gaps_critical {
@@ -213,14 +213,8 @@ walker:pub parse_denial {
         profiles_aa: list[PayerProfile] = [root->:HasPayerProfile:->][?:PayerProfile];
         pay_pair = payer_profile_strings(payer_name, profiles_aa);
 
-        analysis = cast(DenialAnalysis, analyze_denial(
-            denial_text=self.raw_denial_text,
-            payer_name=payer_name,
-            payer_criteria_engine=pay_pair[0],
-            payer_appeal_notes=pay_pair[1],
-            cpt_code=req.cpt_code,
-            patient_diagnosis=req.diagnosis_codes[0] if req.diagnosis_codes else ""
-        ) by llm());
+        analysis = cast(DenialAnalysis, analyze_denial(denial_text=self.raw_denial_text, payer_name=payer_name, cpt_code=req.cpt_code, patient_diagnosis=req.diagnosis_codes[0] if req.diagnosis_codes else ""
+        ));
 
         denial_type: str = analysis.denial_type;
         base_score: float = 0.05;
@@ -237,7 +231,7 @@ walker:pub parse_denial {
             denial_type=denial_type,
             criterion_failed=analysis.criterion_failed,
             documentation_available=docs_available
-        ) by llm());
+        ));
 
         final_score: float = (base_score * 0.6) + (llm_score * 0.4);
         is_viable: bool = final_score > 0.5;
@@ -308,10 +302,7 @@ walker:pub draft_appeal {
             diagnosis=req.diagnosis_codes[0] if req.diagnosis_codes else "",
             treatment_history=req.treatment_history,
             clinical_evidence=evidence,
-            payer_name=patient_case.payer_name,
-            criteria_engine=payer_ctx_list[0],
-            appeal_language_notes=payer_ctx_list[1],
-        ) by llm());
+        ));
 
         appeal = AppealRecord(
             appeal_id=str(uuid.uuid4()),
@@ -425,14 +416,8 @@ walker:pub auto_process_case {
             profiles_an: list[PayerProfile] = [root->:HasPayerProfile:->][?:PayerProfile];
             payer_an_vals = payer_profile_strings(patient_case.payer_name, profiles_an);
 
-            analysis = cast(DenialAnalysis, analyze_denial(
-                denial_text=self.denial_text,
-                payer_name=payer_name_an,
-                payer_criteria_engine=payer_an_vals[0],
-                payer_appeal_notes=payer_an_vals[1],
-                cpt_code=req.cpt_code,
-                patient_diagnosis=req.diagnosis_codes[0] if req.diagnosis_codes else ""
-            ) by llm());
+            analysis = cast(DenialAnalysis, analyze_denial(denial_text=self.denial_text, payer_name=payer_name_an, cpt_code=req.cpt_code, patient_diagnosis=req.diagnosis_codes[0] if req.diagnosis_codes else ""
+            ));
 
             denial_type_new: str = analysis.denial_type;
             base_score: float = 0.05;
@@ -449,7 +434,7 @@ walker:pub auto_process_case {
                 denial_type=denial_type_new,
                 criterion_failed=analysis.criterion_failed,
                 documentation_available=docs_available
-            ) by llm());
+            ));
 
             final_score: float = (base_score * 0.6) + (llm_score * 0.4);
             is_viable: bool = final_score > 0.5;
@@ -504,10 +489,7 @@ walker:pub auto_process_case {
             diagnosis=req.diagnosis_codes[0] if req.diagnosis_codes else "",
             treatment_history=req.treatment_history,
             clinical_evidence=evidence,
-            payer_name=patient_case.payer_name,
-            criteria_engine=payer_auto_ctx[0],
-            appeal_language_notes=payer_auto_ctx[1],
-        ) by llm());
+        ));
 
         if self.auto_submit_appeal {
             appeal = AppealRecord(

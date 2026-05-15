@@ -99,7 +99,7 @@ node PreSubmissionAudit {
     has gaps_recommended: list[str];
     has submission_ready: bool = False;
     has confidence_score: float = 0.0;
-    has audit_timestamp: str;
+    has audit_timestamp: str = "";
     has estimated_approval_probability: float = 0.0;
 }
 
