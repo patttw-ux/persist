@@ -489,6 +489,10 @@ export function Dashboard() {
                   )}
                 </table>
               </div>
+              <p className="mt-6 text-center text-xs text-slate-400">
+                All patient data is Protected Health Information (PHI) handled in
+                accordance with HIPAA Privacy Rule 45 CFR §164
+              </p>
             </>
           )}
         </div>

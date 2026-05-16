@@ -783,6 +783,19 @@ export function CaseDetail() {
     if (!caseId) {
       return;
     }
+    const dataForCase =
+      caseData?.case_id === caseId ? caseData : undefined;
+    if (!dataForCase) {
+      return;
+    }
+    const shouldConnectStream =
+      agentStreamKey > 0 ||
+      dataForCase.status === "submitted" ||
+      dataForCase.status === "pending";
+    if (!shouldConnectStream) {
+      setAgentStreaming(false);
+      return;
+    }
     setAgentStreaming(true);
     setAgentStreamError(null);
 
@@ -802,7 +815,7 @@ export function CaseDetail() {
     );
 
     return cleanup;
-  }, [caseId, onStep, agentStreamKey]);
+  }, [caseId, caseData?.case_id, caseData?.status, onStep, agentStreamKey]);
 
   const completedSteps = useMemo(
     () => steps.filter((s) => s.status === "done").length,
