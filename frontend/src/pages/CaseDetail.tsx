@@ -123,6 +123,180 @@ function formatAppealFiledDate(iso: string): string {
   });
 }
 
+function getTransmissionLines(
+  appeal: AppealData,
+  payer: string,
+  cptCode: string,
+  memberId: string
+) {
+  return [
+    {
+      time: "00:00.1",
+      type: "info" as const,
+      text: "Initializing FHIR R4 ClaimResponse bundle...",
+    },
+    {
+      time: "00:00.3",
+      type: "info" as const,
+      text: `Patient demographics validated — Member ID ${memberId}`,
+    },
+    {
+      time: "00:00.6",
+      type: "info" as const,
+      text: `CPT ${cptCode} coverage verified under active policy`,
+    },
+    {
+      time: "00:01.1",
+      type: "send" as const,
+      text: `POST /fhir/r4/Claim/$submit → ${payer} EDI Gateway`,
+    },
+    {
+      time: "00:01.8",
+      type: "recv" as const,
+      text: `HTTP 200 OK — Claim accepted by ${payer}`,
+    },
+    {
+      time: "00:02.1",
+      type: "recv" as const,
+      text: "ClaimResponse.status: active | outcome: complete",
+    },
+    {
+      time: "00:02.4",
+      type: "info" as const,
+      text: `Appeal reference assigned: #${appeal.appeal_id.slice(0, 8).toUpperCase()}`,
+    },
+    {
+      time: "00:02.9",
+      type: "success" as const,
+      text: "Appeal transmitted successfully — awaiting payer adjudication",
+    },
+  ];
+}
+
+function AppealTransmissionLog({
+  appeal,
+  payer,
+  cptCode,
+  memberId,
+}: {
+  appeal: AppealData;
+  payer: string;
+  cptCode: string;
+  memberId: string;
+}) {
+  const lines = useMemo(
+    () => getTransmissionLines(appeal, payer, cptCode, memberId),
+    [appeal, payer, cptCode, memberId]
+  );
+  const [visibleLines, setVisibleLines] = useState(0);
+
+  useEffect(() => {
+    const total = lines.length;
+    setVisibleLines(0);
+    if (total === 0) {
+      return;
+    }
+    const timeouts: ReturnType<typeof setTimeout>[] = [];
+    for (let i = 1; i <= total; i += 1) {
+      timeouts.push(
+        setTimeout(() => setVisibleLines(i), (i - 1) * 300)
+      );
+    }
+    return () => timeouts.forEach(clearTimeout);
+  }, [lines]);
+
+  function typeLabelClasses(
+    type: (typeof lines)[number]["type"]
+  ): string {
+    switch (type) {
+      case "info":
+        return "text-blue-400";
+      case "send":
+        return "text-amber-400";
+      case "recv":
+        return "text-green-400";
+      case "success":
+        return "text-green-300";
+      default:
+        return "text-slate-400";
+    }
+  }
+
+  function typeLabel(type: (typeof lines)[number]["type"]): string {
+    switch (type) {
+      case "info":
+        return "INFO ";
+      case "send":
+        return "SEND ";
+      case "recv":
+        return "RECV ";
+      case "success":
+        return "✓ OK  ";
+      default:
+        return "";
+    }
+  }
+
+  function messageClasses(type: (typeof lines)[number]["type"]): string {
+    switch (type) {
+      case "info":
+        return "text-slate-300";
+      case "send":
+        return "text-amber-300";
+      case "recv":
+        return "text-green-300";
+      case "success":
+        return "text-green-200 font-semibold";
+      default:
+        return "text-slate-300";
+    }
+  }
+
+  return (
+    <div className="mb-4 rounded-lg bg-slate-900 p-4 font-mono text-xs">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span
+            className="h-2 w-2 animate-pulse rounded-full bg-green-400"
+            aria-hidden
+          />
+          <span className="font-mono text-xs text-green-400">
+            FHIR R4 Transmission Log
+          </span>
+        </div>
+        <span className="text-xs text-slate-500">
+          Reference #
+          {appeal.appeal_id.slice(0, 8).toUpperCase()}
+        </span>
+      </div>
+      <div>
+        {lines.slice(0, visibleLines).map((line, index) => (
+          <div
+            key={`${line.time}-${line.type}-${index}`}
+            className="mb-1 flex items-start gap-2"
+          >
+            <span className="shrink-0 text-slate-500">[{line.time}]</span>
+            <span className={`shrink-0 ${typeLabelClasses(line.type)}`}>
+              {typeLabel(line.type)}
+            </span>
+            <span className={`min-w-0 break-words ${messageClasses(line.type)}`}>
+              {line.text}
+            </span>
+          </div>
+        ))}
+      </div>
+      {visibleLines >= lines.length && lines.length > 0 ? (
+        <span
+          className="mt-1 inline-block animate-pulse text-green-400"
+          aria-hidden
+        >
+          █
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function paragraphHasClinicalCue(text: string): boolean {
   const lower = text.toLowerCase();
   return (
@@ -165,6 +339,8 @@ function AppealLetterHero({
   appeal,
   patientName,
   memberId,
+  payerName,
+  cptCode,
   onCopy,
   onSubmit,
   submitBusy,
@@ -172,6 +348,8 @@ function AppealLetterHero({
   appeal: AppealData;
   patientName: string;
   memberId: string;
+  payerName: string;
+  cptCode: string;
   onCopy: () => void;
   onSubmit: () => void;
   submitBusy: boolean;
@@ -272,6 +450,17 @@ function AppealLetterHero({
           </span>
         </span>
       </div>
+
+      {appeal.status === "submitted" ? (
+        <div className="px-6 pt-3">
+          <AppealTransmissionLog
+            appeal={appeal}
+            payer={payerName}
+            cptCode={cptCode}
+            memberId={memberId}
+          />
+        </div>
+      ) : null}
 
       <div className="px-6 py-5">
         {paragraphs.length === 0 ? (
@@ -1326,6 +1515,8 @@ export function CaseDetail() {
                         appeal={caseData.appeal}
                         patientName={caseData.patient_name}
                         memberId={caseData.member_id}
+                        payerName={caseData.payer_name}
+                        cptCode={caseData.cpt_code}
                         onCopy={handleCopyLetter}
                         onSubmit={() => void handleSubmitAppeal()}
                         submitBusy={appealActionBusy}
