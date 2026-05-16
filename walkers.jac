@@ -749,6 +749,54 @@ walker:pub get_all_cases {
     }
 }
 
+walker:pub get_dashboard_stats {
+    can fetch with Root entry {
+        all_cases: list[PatientCase] = [root-->][?:PatientCase];
+        total_cases: int = len(all_cases);
+        submitted: int = 0;
+        denied: int = 0;
+        appeal_submitted: int = 0;
+        total_viability: float = 0.0;
+        viability_count: int = 0;
+        pattern_count: int = 0;
+
+        for patient_case in all_cases {
+            requests: list[PARequest] = [patient_case->:HasRequest:->][?:PARequest];
+            if not requests { continue; }
+            req: PARequest = requests[0];
+
+            if req.status == "submitted" { submitted += 1; }
+            elif req.status == "denied" { denied += 1; }
+            elif req.status == "appeal_submitted" { appeal_submitted += 1; }
+            elif req.status == "approved" { appeal_submitted += 1; }
+
+            denials: list[DenialRecord] = [req->:HasDenial:->][?:DenialRecord];
+            if denials {
+                denial: DenialRecord = denials[0];
+                total_viability += denial.appeal_viability_score;
+                viability_count += 1;
+            }
+        }
+
+        patterns: list[DenialPattern] = [root->:HasDenialPattern:->][?:DenialPattern];
+        pattern_count = len(patterns);
+
+        avg_viability: float = (total_viability / viability_count) if viability_count > 0 else 0.0;
+        hours_saved: float = appeal_submitted * 2.5;
+
+        report {
+            "total_cases": total_cases,
+            "submitted_pending": submitted,
+            "denied": denied,
+            "appeals_filed": appeal_submitted,
+            "avg_viability_score": round(avg_viability * 100),
+            "hours_saved": hours_saved,
+            "denial_patterns_learned": pattern_count,
+            "data_source": "AMA 2024 Prior Authorization Survey"
+        };
+    }
+}
+
 walker:pub get_case_detail {
     has case_id: str;
 

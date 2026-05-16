@@ -39,7 +39,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ChangeEvent,
   type DragEvent,
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -796,7 +795,7 @@ export function CaseDetail() {
   );
 
   const handlePdfDrop = useCallback(
-    (e: DragEvent<HTMLDivElement>) => {
+    (e: DragEvent<HTMLElement>) => {
       e.preventDefault();
       const file = e.dataTransfer.files?.[0];
       if (!file) {

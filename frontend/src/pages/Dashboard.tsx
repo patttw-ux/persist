@@ -2,23 +2,27 @@ import { AppHeader } from "@/components/AppHeader";
 import { NewPASheet } from "@/components/NewPASheet";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCountUp } from "@/hooks/useCountUp";
 import { api } from "@/lib/api";
 import { formatRelativeTime } from "@/lib/formatRelativeTime";
-import type { CMSDeadlineCheckReport, PACase, PAStatus } from "@/lib/types";
+import type {
+  CMSDeadlineCheckReport,
+  DashboardStats,
+  PACase,
+  PAStatus,
+} from "@/lib/types";
 import {
   Activity,
   AlertCircle,
+  Brain,
   CheckCircle2,
   Clock,
   FileText,
   FileX,
   Plus,
   RefreshCw,
-  XCircle,
+  Shield,
 } from "lucide-react";
-import type { ComponentType } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -42,33 +46,6 @@ function normalizeStatus(status: string): PAStatus {
 
 function normalizeCase(raw: PACase): PACase {
   return { ...raw, status: normalizeStatus(raw.status) };
-}
-
-function KpiCard({
-  borderClass,
-  icon: Icon,
-  iconClass,
-  label,
-  target,
-}: {
-  borderClass: string;
-  icon: ComponentType<{ className?: string }>;
-  iconClass: string;
-  label: string;
-  target: number;
-}) {
-  const count = useCountUp(target, 600);
-  return (
-    <div
-      className={`rounded-lg border border-slate-200 bg-white p-4 border-l-4 ${borderClass}`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <Icon className={`h-5 w-5 shrink-0 ${iconClass}`} />
-      </div>
-      <p className="mt-3 text-3xl font-bold text-slate-900">{count}</p>
-      <p className="mt-1 text-sm text-slate-500">{label}</p>
-    </div>
-  );
 }
 
 function ActionCell({
@@ -180,6 +157,9 @@ export function Dashboard() {
   const [cmsDeadline, setCmsDeadline] = useState<CMSDeadlineCheckReport | null>(
     null
   );
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(
+    null
+  );
 
   const refreshCmsDeadlines = useCallback(async () => {
     try {
@@ -247,6 +227,12 @@ export function Dashboard() {
       }
       const normalized = data.map(normalizeCase);
       setCases(normalized);
+      try {
+        const stats = await api.getDashboardStats();
+        setDashboardStats(stats);
+      } catch {
+        /* stats failure must not block queue load */
+      }
       scheduleDeniedAutoProcess(normalized);
       await refreshCmsDeadlines();
     } catch (e) {
@@ -272,20 +258,6 @@ export function Dashboard() {
       document.title = "Persist";
     };
   }, []);
-
-  const kpi = useMemo(() => {
-    const total = cases.length;
-    const pendingDecision = cases.filter(
-      (c) => c.status === "submitted" || c.status === "pending"
-    ).length;
-    const deniedFight = cases.filter(
-      (c) => c.status === "denied" && c.appeal_viable
-    ).length;
-    const appealsFiled = cases.filter(
-      (c) => c.status === "appeal_submitted" || c.status === "appeal_won"
-    ).length;
-    return { total, pendingDecision, deniedFight, appealsFiled };
-  }, [cases]);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
@@ -313,34 +285,61 @@ export function Dashboard() {
 
           {!loading && cases.length > 0 && (
             <div className="mb-8 grid grid-cols-4 gap-4">
-              <KpiCard
-                borderClass="border-l-blue-400"
-                icon={FileText}
-                iconClass="text-blue-500"
-                label="Active Cases"
-                target={kpi.total}
-              />
-              <KpiCard
-                borderClass="border-l-amber-400"
-                icon={Clock}
-                iconClass="text-amber-500"
-                label="Pending Decision"
-                target={kpi.pendingDecision}
-              />
-              <KpiCard
-                borderClass="border-l-red-400"
-                icon={XCircle}
-                iconClass="text-red-500"
-                label="Denied · Needs Fight"
-                target={kpi.deniedFight}
-              />
-              <KpiCard
-                borderClass="border-l-green-400"
-                icon={CheckCircle2}
-                iconClass="text-green-500"
-                label="Appeals Filed"
-                target={kpi.appealsFiled}
-              />
+              <div className="rounded-lg border border-slate-200 bg-white p-4 border-l-4 border-l-blue-400">
+                <div className="flex items-start justify-between gap-2">
+                  <FileText className="h-5 w-5 shrink-0 text-blue-500" />
+                </div>
+                <p className="mt-3 text-3xl font-bold text-slate-900">
+                  {dashboardStats?.total_cases ?? cases.length}
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Total PA Requests
+                </p>
+                <p className="mt-1 text-sm text-slate-400">
+                  {(dashboardStats?.submitted_pending ?? 0) +
+                    " pending payer response"}
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-4 border-l-4 border-l-green-400">
+                <div className="flex items-start justify-between gap-2">
+                  <Shield className="h-5 w-5 shrink-0 text-green-500" />
+                </div>
+                <p className="mt-3 text-3xl font-bold text-slate-900">
+                  {dashboardStats?.appeals_filed ?? "--"}
+                </p>
+                <p className="mt-1 text-sm text-slate-500">Appeals Filed</p>
+                <p className="mt-1 text-sm text-slate-400">
+                  Autonomously by Persist
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-4 border-l-4 border-l-amber-400">
+                <div className="flex items-start justify-between gap-2">
+                  <Clock className="h-5 w-5 shrink-0 text-amber-500" />
+                </div>
+                <p className="mt-3 text-3xl font-bold text-slate-900">
+                  {dashboardStats?.hours_saved
+                    ? `${dashboardStats.hours_saved.toFixed(1)}h`
+                    : "--"}
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Staff Hours Saved
+                </p>
+                <p className="mt-1 text-sm text-slate-400">
+                  vs 2.5hrs manual per appeal
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-4 border-l-4 border-l-purple-400">
+                <div className="flex items-start justify-between gap-2">
+                  <Brain className="h-5 w-5 shrink-0 text-purple-500" />
+                </div>
+                <p className="mt-3 text-3xl font-bold text-slate-900">
+                  {dashboardStats?.denial_patterns_learned ?? "--"}
+                </p>
+                <p className="mt-1 text-sm text-slate-500">Patterns Learned</p>
+                <p className="mt-1 text-sm text-slate-400">
+                  Graph memory — getting smarter
+                </p>
+              </div>
             </div>
           )}
 
@@ -378,6 +377,7 @@ export function Dashboard() {
                   <Skeleton className="h-5 w-5 rounded" />
                   <Skeleton className="mt-3 h-9 w-12" />
                   <Skeleton className="mt-2 h-4 w-24" />
+                  <Skeleton className="mt-2 h-4 w-32" />
                 </div>
               ))}
             </div>

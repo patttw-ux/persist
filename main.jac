@@ -11,7 +11,7 @@ import from abilities {
 import from walkers {
     submit_pa, extract_pa_from_note, audit_prior_auth, parse_denial, process_denial_pdf, draft_appeal, submit_appeal,
     auto_process_case,
-    get_all_cases, get_case_detail, seed_demo_data,
+    get_all_cases, get_dashboard_stats, get_case_detail, seed_demo_data,
     seed_payer_intelligence, get_payer_profile, record_denial_pattern,
     check_cms_deadlines, get_monitoring_dashboard, mark_expedited,
     agent_status_stream,
