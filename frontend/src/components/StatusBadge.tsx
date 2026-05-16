@@ -34,6 +34,14 @@ const STATUS_CONFIG: Record<
     label: "Appeal Won",
     className: "bg-green-50 text-green-700 border-green-200",
   },
+  denied_final: {
+    label: "Denied (Final)",
+    className: "bg-red-50 text-red-700 border-red-200",
+  },
+  p2p_requested: {
+    label: "P2P Requested",
+    className: "bg-purple-50 text-purple-800 border-purple-200",
+  },
   expired: {
     label: "Expired",
     className: "bg-slate-100 text-slate-500 border-slate-200",

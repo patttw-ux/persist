@@ -12,6 +12,7 @@ import type {
   CaseDetail,
   DenialData,
   DenialType,
+  P2PReviewResult,
   PAStatus,
   StepStatus,
 } from "@/lib/types";
@@ -27,10 +28,12 @@ import {
   Copy,
   FileText,
   Loader2,
+  Phone,
   Send,
   Shield,
   Trophy,
   Upload,
+  XCircle,
   Zap,
 } from "lucide-react";
 import {
@@ -52,6 +55,8 @@ const PA_STATUS_SET = new Set<string>([
   "appeal_drafted",
   "appeal_submitted",
   "appeal_won",
+  "denied_final",
+  "p2p_requested",
   "expired",
 ]);
 
@@ -509,6 +514,11 @@ export function CaseDetail() {
   const [manualDenialText, setManualDenialText] = useState("");
   const [pdfReadError, setPdfReadError] = useState<string | null>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
+  const [outcomeBusy, setOutcomeBusy] = useState(false);
+  const [p2pPhysicianName, setP2pPhysicianName] = useState("");
+  const [p2pPreferredTime, setP2pPreferredTime] = useState("");
+  const [p2pResult, setP2pResult] = useState<P2PReviewResult | null>(null);
+  const [p2pBusy, setP2pBusy] = useState(false);
 
   const loadCase = useCallback(async () => {
     if (!caseId) {
@@ -536,6 +546,12 @@ export function CaseDetail() {
   useEffect(() => {
     void loadCase();
   }, [loadCase]);
+
+  useEffect(() => {
+    setP2pResult(null);
+    setP2pPhysicianName("");
+    setP2pPreferredTime("");
+  }, [caseId]);
 
   useEffect(() => {
     if (caseData?.patient_name) {
@@ -750,6 +766,72 @@ export function CaseDetail() {
       setMarkExpeditedBusy(false);
     }
   }, [caseId, loadCase]);
+
+  const markOutcome = useCallback(
+    async (outcome: "won" | "lost") => {
+      if (!caseId) {
+        return;
+      }
+      setOutcomeBusy(true);
+      try {
+        const res = await api.markAppealOutcome({ case_id: caseId, outcome });
+        if ("error" in res && typeof res.error === "string") {
+          toast.error(res.error, { duration: 4000 });
+          return;
+        }
+        await loadCase();
+        if (outcome === "won") {
+          toast.success(
+            "Appeal won — patient gets their medication. Persist is learning.",
+            { duration: 4000 }
+          );
+        } else {
+          toast.error(
+            "Outcome recorded — consider P2P review or external appeal",
+            { duration: 4000 }
+          );
+        }
+      } catch (e) {
+        const msg =
+          e instanceof Error ? e.message : "Failed to record appeal outcome";
+        toast.error(`Something went wrong — ${msg}`, { duration: 5000 });
+      } finally {
+        setOutcomeBusy(false);
+      }
+    },
+    [caseId, loadCase]
+  );
+
+  const handleRequestP2PReview = useCallback(async () => {
+    if (!caseId) {
+      return;
+    }
+    setP2pBusy(true);
+    try {
+      const res = await api.requestP2PReview({
+        case_id: caseId,
+        ...(p2pPhysicianName.trim()
+          ? { physician_name: p2pPhysicianName.trim() }
+          : {}),
+        ...(p2pPreferredTime.trim()
+          ? { preferred_time: p2pPreferredTime.trim() }
+          : {}),
+      });
+      if ("error" in res && typeof res.error === "string") {
+        toast.error(res.error, { duration: 4000 });
+        return;
+      }
+      setP2pResult(res);
+      await loadCase();
+      toast.success(res.message ?? "P2P review requested", { duration: 3000 });
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : "Failed to request P2P review";
+      toast.error(`Something went wrong — ${msg}`, { duration: 5000 });
+    } finally {
+      setP2pBusy(false);
+    }
+  }, [caseId, loadCase, p2pPhysicianName, p2pPreferredTime]);
 
   const ingestPdfFile = useCallback((file: File) => {
     setPdfReadError(null);
@@ -1161,15 +1243,154 @@ export function CaseDetail() {
                     </section>
                   ) : null}
 
+                  {caseData.denial &&
+                  caseData.denial.appeal_viable === false &&
+                  (caseData.status === "denied" ||
+                    caseData.status === "p2p_requested") ? (
+                    <section className="mb-4 rounded-xl border border-purple-200 bg-purple-50 p-5">
+                      <div className="flex gap-3">
+                        <Phone
+                          className="h-5 w-5 shrink-0 text-purple-600"
+                          aria-hidden
+                        />
+                        <div>
+                          <h3 className="text-sm font-semibold text-purple-800">
+                            Peer-to-Peer Review Recommended
+                          </h3>
+                          <p className="mt-1 text-xs text-purple-500">
+                            69% overturn rate when conducted within 72 hours
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-col gap-3">
+                        <input
+                          type="text"
+                          placeholder="Your name"
+                          value={p2pPhysicianName}
+                          onChange={(e) =>
+                            setP2pPhysicianName(e.target.value)
+                          }
+                          className="w-full rounded-lg border border-purple-200 px-3 py-2 text-sm"
+                          disabled={caseData.status === "p2p_requested"}
+                        />
+                        <input
+                          type="text"
+                          placeholder="Preferred call time (e.g. Tomorrow 2-4pm)"
+                          value={p2pPreferredTime}
+                          onChange={(e) =>
+                            setP2pPreferredTime(e.target.value)
+                          }
+                          className="w-full rounded-lg border border-purple-200 px-3 py-2 text-sm"
+                          disabled={caseData.status === "p2p_requested"}
+                        />
+                      </div>
+                      {caseData.status === "denied" ? (
+                        <button
+                          type="button"
+                          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-purple-700 disabled:pointer-events-none disabled:opacity-50"
+                          disabled={p2pBusy}
+                          onClick={() => void handleRequestP2PReview()}
+                        >
+                          {p2pBusy ? (
+                            <Loader2
+                              className="h-4 w-4 shrink-0 animate-spin"
+                              aria-hidden
+                            />
+                          ) : (
+                            <Phone
+                              className="h-4 w-4 shrink-0"
+                              aria-hidden
+                            />
+                          )}
+                          Request P2P Review
+                        </button>
+                      ) : null}
+                      {p2pResult && p2pResult.talking_points.length > 0 ? (
+                        <div className="mt-4">
+                          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-purple-700">
+                            P2P Talking Points
+                          </p>
+                          <ol className="list-inside list-decimal space-y-2 text-sm leading-relaxed text-purple-800">
+                            {p2pResult.talking_points.map((pt, idx) => (
+                              <li key={`${idx}-${pt.slice(0, 24)}`}>{pt}</li>
+                            ))}
+                          </ol>
+                        </div>
+                      ) : null}
+                    </section>
+                  ) : null}
+
                   {caseData.appeal ? (
-                    <AppealLetterHero
-                      appeal={caseData.appeal}
-                      patientName={caseData.patient_name}
-                      memberId={caseData.member_id}
-                      onCopy={handleCopyLetter}
-                      onSubmit={() => void handleSubmitAppeal()}
-                      submitBusy={appealActionBusy}
-                    />
+                    <>
+                      <AppealLetterHero
+                        appeal={caseData.appeal}
+                        patientName={caseData.patient_name}
+                        memberId={caseData.member_id}
+                        onCopy={handleCopyLetter}
+                        onSubmit={() => void handleSubmitAppeal()}
+                        submitBusy={appealActionBusy}
+                      />
+                      {(caseData.appeal.status === "submitted" ||
+                        caseData.appeal.status === "appeal_submitted" ||
+                        caseData.status === "approved" ||
+                        caseData.status === "denied_final") ? (
+                        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-5">
+                          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                            Record Payer Response
+                          </p>
+                          {caseData.status === "approved" ? (
+                            <div className="flex gap-2 rounded-lg bg-green-50 p-3">
+                              <Trophy
+                                className="h-5 w-5 shrink-0 text-green-600"
+                                aria-hidden
+                              />
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-green-700">
+                                  Appeal Won — Patient gets their medication
+                                </p>
+                                <p className="text-xs text-green-600">
+                                  Persist learned from this case — denial
+                                  pattern updated
+                                </p>
+                              </div>
+                            </div>
+                          ) : caseData.status === "denied_final" ? (
+                            <div className="rounded-lg bg-red-50 p-3">
+                              <p className="text-sm text-red-700">
+                                Appeal Denied — Consider external ERISA review
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-3">
+                              <button
+                                type="button"
+                                className="inline-flex flex-1 min-w-[140px] items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-green-700 disabled:pointer-events-none disabled:opacity-50"
+                                disabled={outcomeBusy}
+                                onClick={() => void markOutcome("won")}
+                              >
+                                <CheckCircle2
+                                  className="h-4 w-4 shrink-0"
+                                  aria-hidden
+                                />
+                                Appeal Won
+                              </button>
+                              <button
+                                type="button"
+                                className="inline-flex flex-1 min-w-[140px] items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:pointer-events-none disabled:opacity-50"
+                                disabled={outcomeBusy}
+                                onClick={() => void markOutcome("lost")}
+                              >
+                                <XCircle
+                                  className="h-4 w-4 shrink-0"
+                                  aria-hidden
+                                />
+                                Appeal Denied
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
+                    </>
                   ) : null}
                 </>
               ) : null}

@@ -1430,6 +1430,137 @@ walker:pub mark_expedited {
     }
 }
 
+walker:pub mark_appeal_outcome {
+    has case_id: str;
+    has outcome: str;
+    has payer_response: str = "";
+
+    can update with Root entry {
+        patient_case = cast(PatientCase, &self.case_id);
+        requests = [patient_case->:HasRequest:->][?:PARequest];
+        if not requests {
+            report {"error": "Case not found"};
+            disengage;
+        }
+        req: PARequest = requests[0];
+        req.payer_response = self.payer_response;
+
+        denials = [req->:HasDenial:->][?:DenialRecord];
+        if not denials {
+            report {"error": "No denial found"};
+            disengage;
+        }
+        denial: DenialRecord = denials[0];
+
+        appeals = [denial->:HasAppeal:->][?:AppealRecord];
+        if not appeals {
+            report {"error": "No appeal found"};
+            disengage;
+        }
+        appeal: AppealRecord = appeals[0];
+        appeal.status = self.outcome;
+
+        if self.outcome == "won" {
+            req.status = "approved";
+            patterns: list[DenialPattern] = [root->:HasDenialPattern:->][?:DenialPattern];
+            for pattern in patterns {
+                if (pattern.payer_name == patient_case.payer_name and
+                    pattern.denial_type == denial.denial_type) {
+                    pattern.times_won += 1;
+                    pattern.win_rate = pattern.times_won / pattern.times_seen if pattern.times_seen > 0 else 0.0;
+                    pattern.successful_appeal_language = appeal.full_letter[:500];
+                }
+            }
+        } elif self.outcome == "lost" {
+            req.status = "denied_final";
+        }
+
+        report {
+            "case_id": jid(patient_case),
+            "outcome": self.outcome,
+            "patient_name": patient_case.patient_name,
+            "payer_name": patient_case.payer_name,
+            "message": "Appeal outcome recorded — Persist is learning from this case",
+        };
+    }
+}
+
+walker:pub request_p2p_review {
+    has case_id: str;
+    has physician_name: str = "";
+    has preferred_time: str = "";
+
+    can request with Root entry {
+        patient_case = cast(PatientCase, &self.case_id);
+        requests = [patient_case->:HasRequest:->][?:PARequest];
+        if not requests {
+            report {"error": "Case not found"};
+            disengage;
+        }
+        req: PARequest = requests[0];
+
+        denials = [req->:HasDenial:->][?:DenialRecord];
+        if not denials {
+            report {"error": "No denial found"};
+            disengage;
+        }
+        denial: DenialRecord = denials[0];
+
+        profiles: list[PayerProfile] = [root->:HasPayerProfile:->][?:PayerProfile];
+        p2p_overturn = "69%";
+        for p in profiles {
+            if p.payer_name == patient_case.payer_name {
+                p2p_overturn = str(int(p.avg_appeal_overturn_rate * 100)) + "%";
+            }
+        }
+
+        talking_points: list[str] = [];
+        if denial.denial_type == "medical_necessity" {
+            talking_points = [
+                "Reference specific clinical guidelines supporting medical necessity",
+                "Present objective outcome measures and disease severity scores",
+                "Cite specialty society guidelines (ACR ADA ACC) as secondary support",
+                "Document why alternatives are contraindicated for this patient",
+            ];
+        } elif denial.denial_type == "step_therapy" {
+            talking_points = [
+                "Document exact dates doses and duration of step therapy trials",
+                "Present objective failure criteria with validated outcome scores",
+                "Explain clinical rationale for skipping to requested therapy",
+                "Reference payer own step therapy exception criteria",
+            ];
+        } elif denial.denial_type == "administrative" {
+            talking_points = [
+                "Identify specific missing documentation causing the denial",
+                "Confirm all required forms were submitted correctly",
+                "Request clarification on exact documentation requirements",
+                "Administrative denials have 95% overturn rate escalate immediately",
+            ];
+        } else {
+            talking_points = [
+                "Request detailed written explanation of non-covered determination",
+                "Review plan documents for coverage exceptions",
+                "Consider ERISA external review if self-funded plan",
+            ];
+        }
+
+        req.status = "p2p_requested";
+
+        report {
+            "case_id": jid(patient_case),
+            "patient_name": patient_case.patient_name,
+            "payer_name": patient_case.payer_name,
+            "denial_type": denial.denial_type,
+            "p2p_overturn_rate": p2p_overturn,
+            "talking_points": talking_points,
+            "physician_name": self.physician_name,
+            "preferred_time": self.preferred_time,
+            "reference_number": str(uuid.uuid4())[:8].upper(),
+            "message": "P2P review requested",
+        };
+    }
+}
+
 @restspec(protocol=APIProtocol.WEBSOCKET)
 async walker :pub agent_status_stream {
     has case_id: str;
