@@ -6,7 +6,7 @@ import os;
 import from typing { cast }
 
 glob llm = Model(model_name="claude-haiku-4-5-20251001");
-glob anthropic_client = Anthropic();
+glob anthropic_client: any = None;
 
 obj DenialAnalysis {
     has denial_type: str;
@@ -42,7 +42,9 @@ def analyze_denial(
     cpt_code: str,
     patient_diagnosis: str
 ) -> DenialAnalysis {
-    response: any = anthropic_client.messages.create(
+    import os;
+    client: any = Anthropic(api_key=cast(str, os.environ.get("ANTHROPIC_API_KEY", "")));
+    response: any = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=1000,
         messages=[{"role": "user", "content": "Return ONLY raw JSON no markdown. Fields: denial_type (medical_necessity/step_therapy/administrative/non_covered), criterion_failed, missing_documentation (array), appeal_strategy, denial_reason_summary. Payer: " + payer_name + " CPT: " + cpt_code + " Diagnosis: " + patient_diagnosis + " Letter: " + denial_text}]
@@ -69,7 +71,9 @@ def draft_appeal_letter(
     clinical_evidence: str
 ) -> AppealLetter {
     prompt: str = "Return ONLY raw JSON no markdown. Fields: subject_line, opening_paragraph, clinical_justification, evidence_cited (array), closing_paragraph, full_letter. Patient: " + patient_name + " Service: " + drug_or_service + " Diagnosis: " + diagnosis + " Denial: " + denial_analysis.denial_type + " Criterion: " + denial_analysis.criterion_failed + " History: " + treatment_history;
-    response: any = anthropic_client.messages.create(
+    import os;
+    client: any = Anthropic(api_key=cast(str, os.environ.get("ANTHROPIC_API_KEY", "")));
+    response: any = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=2000,
         messages=[{"role": "user", "content": prompt}]
@@ -92,7 +96,9 @@ def extract_clinical_note(
     clinical_note_text: str,
     payer_name: str
 ) -> ClinicalNoteExtraction {
-    response: any = anthropic_client.messages.create(
+    import os;
+    client: any = Anthropic(api_key=cast(str, os.environ.get("ANTHROPIC_API_KEY", "")));
+    response: any = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=1000,
         messages=[{"role": "user", "content": "Extract structured data from this clinical note for prior authorization. Return ONLY raw JSON no markdown. Fields: patient_name (string), patient_dob (string YYYY-MM-DD), member_id (string), cpt_code (string), drug_name (string), diagnosis_codes (array of ICD-10 strings), treatment_history (string), clinical_notes (string). If unknown return empty string or array.\n\nPayer: " + payer_name + "\n\nNote:\n" + clinical_note_text}]
