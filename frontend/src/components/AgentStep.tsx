@@ -30,7 +30,7 @@ function StatusIcon({ status }: { status: StepStatus }) {
       return <Circle className="mt-0.5 h-4 w-4 shrink-0 text-slate-300" />;
     case "running":
       return (
-        <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-blue-500" />
+        <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-indigo-500" />
       );
     case "done":
       return (
@@ -85,7 +85,7 @@ export function AgentStep({
           <p className="mt-0.5 text-xs text-slate-500">
             {detail}
             {status === "running" && (
-              <span className="animate-pulse">▊</span>
+              <span className="animate-pulse text-indigo-400">▊</span>
             )}
           </p>
         )}

@@ -20,7 +20,7 @@ import {
   FileX,
   Plus,
   RefreshCw,
-  Shield,
+  Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -276,7 +276,7 @@ export function Dashboard() {
             <button
               type="button"
               onClick={() => setSheetOpen(true)}
-              className="inline-flex shrink-0 items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
             >
               <Plus className="h-4 w-4" />
               New PA Request
@@ -285,60 +285,47 @@ export function Dashboard() {
 
           {!loading && cases.length > 0 && (
             <div className="mb-8 grid grid-cols-4 gap-4">
-              <div className="rounded-lg border border-slate-200 bg-white p-4 border-l-4 border-l-blue-400">
-                <div className="flex items-start justify-between gap-2">
-                  <FileText className="h-5 w-5 shrink-0 text-blue-500" />
+              <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-t-2 border-t-indigo-500">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Requests</p>
+                  <FileText className="h-4 w-4 text-indigo-400" />
                 </div>
-                <p className="mt-3 text-3xl font-bold text-slate-900">
+                <p className="mt-4 text-4xl font-bold tracking-tight text-slate-900 tabular-nums">
                   {dashboardStats?.total_cases ?? cases.length}
                 </p>
                 <p className="mt-1 text-sm text-slate-500">
-                  Total PA Requests
-                </p>
-                <p className="mt-1 text-sm text-slate-400">
-                  {(dashboardStats?.submitted_pending ?? 0) +
-                    " pending payer response"}
+                  {(dashboardStats?.submitted_pending ?? 0)} pending payer response
                 </p>
               </div>
-              <div className="rounded-lg border border-slate-200 bg-white p-4 border-l-4 border-l-green-400">
-                <div className="flex items-start justify-between gap-2">
-                  <Shield className="h-5 w-5 shrink-0 text-green-500" />
+              <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-t-2 border-t-indigo-500">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Appeals Filed</p>
+                  <Zap className="h-4 w-4 text-indigo-400" />
                 </div>
-                <p className="mt-3 text-3xl font-bold text-slate-900">
+                <p className="mt-4 text-4xl font-bold tracking-tight text-slate-900 tabular-nums">
                   {dashboardStats?.appeals_filed ?? "--"}
                 </p>
-                <p className="mt-1 text-sm text-slate-500">Appeals Filed</p>
-                <p className="mt-1 text-sm text-slate-400">
-                  Autonomously by Persist
-                </p>
+                <p className="mt-1 text-sm text-slate-500">Autonomously by Persist</p>
               </div>
-              <div className="rounded-lg border border-slate-200 bg-white p-4 border-l-4 border-l-amber-400">
-                <div className="flex items-start justify-between gap-2">
-                  <Clock className="h-5 w-5 shrink-0 text-amber-500" />
+              <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-t-2 border-t-indigo-500">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Hours Saved</p>
+                  <Clock className="h-4 w-4 text-indigo-400" />
                 </div>
-                <p className="mt-3 text-3xl font-bold text-slate-900">
-                  {dashboardStats?.hours_saved
-                    ? `${dashboardStats.hours_saved.toFixed(1)}h`
-                    : "--"}
+                <p className="mt-4 text-4xl font-bold tracking-tight text-slate-900 tabular-nums">
+                  {dashboardStats?.hours_saved ? `${dashboardStats.hours_saved.toFixed(1)}h` : "--"}
                 </p>
-                <p className="mt-1 text-sm text-slate-500">
-                  Staff Hours Saved
-                </p>
-                <p className="mt-1 text-sm text-slate-400">
-                  vs 2.5hrs manual per appeal
-                </p>
+                <p className="mt-1 text-sm text-slate-500">vs 2.5hrs manual per appeal</p>
               </div>
-              <div className="rounded-lg border border-slate-200 bg-white p-4 border-l-4 border-l-purple-400">
-                <div className="flex items-start justify-between gap-2">
-                  <Brain className="h-5 w-5 shrink-0 text-purple-500" />
+              <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-t-2 border-t-indigo-500">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Patterns Learned</p>
+                  <Brain className="h-4 w-4 text-indigo-400" />
                 </div>
-                <p className="mt-3 text-3xl font-bold text-slate-900">
+                <p className="mt-4 text-4xl font-bold tracking-tight text-slate-900 tabular-nums">
                   {dashboardStats?.denial_patterns_learned ?? "--"}
                 </p>
-                <p className="mt-1 text-sm text-slate-500">Patterns Learned</p>
-                <p className="mt-1 text-sm text-slate-400">
-                  Graph memory — getting smarter
-                </p>
+                <p className="mt-1 text-sm text-slate-500">Graph memory — getting smarter</p>
               </div>
             </div>
           )}
@@ -372,7 +359,7 @@ export function Dashboard() {
               {Array.from({ length: 4 }).map((_, i) => (
                 <div
                   key={i}
-                  className="rounded-lg border border-slate-200 bg-white p-4 border-l-4 border-l-slate-200"
+                  className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
                 >
                   <Skeleton className="h-5 w-5 rounded" />
                   <Skeleton className="mt-3 h-9 w-12" />
@@ -395,7 +382,7 @@ export function Dashboard() {
               <button
                 type="button"
                 onClick={() => setSheetOpen(true)}
-                className="mt-4 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                className="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
               >
                 Submit First PA Request
               </button>
@@ -452,7 +439,7 @@ export function Dashboard() {
                       {cases.map((c) => (
                         <tr
                           key={c.case_id}
-                          className="cursor-pointer border-b border-slate-100 transition-colors duration-100 last:border-0 hover:bg-blue-50/50"
+                          className="cursor-pointer border-b border-slate-100 transition-colors duration-100 last:border-0 hover:bg-indigo-50/40"
                           onClick={() => navigate(`/case/${c.case_id}`)}
                         >
                           <td className="px-4 py-3">

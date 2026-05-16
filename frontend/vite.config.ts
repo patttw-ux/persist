@@ -13,10 +13,10 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/walker': 'http://localhost:8765',
-      '/user': 'http://localhost:8765',
+      '/walker': 'http://localhost:8766',
+      '/user': 'http://localhost:8766',
       '/ws': {
-        target: 'ws://localhost:8765',
+        target: 'ws://localhost:8766',
         ws: true,
         rewriteWsOrigin: true,
       },

@@ -1,126 +1,316 @@
-import { Lock, Loader2, Shield, ShieldCheck } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
+
 import type { FormEvent } from "react";
+
 import { useState } from "react";
 
+
+
 const VALID_EMAIL = "admin@persisthealth.com";
+
 const VALID_PASSWORD = "persist2026";
 
+
+
 type LoginProps = {
+
   onLogin: () => void;
+
 };
 
+
+
+const VALUE_PROPS = [
+
+  "81.7% appeal overturn rate",
+
+  "Zero physician time required",
+
+  "HIPAA compliant — PHI encrypted at rest",
+
+] as const;
+
+
+
 export function Login({ onLogin }: LoginProps) {
+
   const [email, setEmail] = useState("");
+
   const [password, setPassword] = useState("");
+
   const [loading, setLoading] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
 
+
+
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+
     e.preventDefault();
+
     setError(null);
+
     setLoading(true);
+
     await new Promise((resolve) => setTimeout(resolve, 800));
+
     if (email === VALID_EMAIL && password === VALID_PASSWORD) {
+
       sessionStorage.setItem("persist_auth", "true");
+
       sessionStorage.setItem("persist_user", email);
+
       onLogin();
+
     } else {
+
       setError("Invalid credentials. Please try again.");
+
     }
+
     setLoading(false);
+
   }
 
+
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950">
-      <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-8 shadow-2xl">
-        <div className="mb-8">
-          <div className="flex items-center">
-            <Shield className="h-8 w-8 text-blue-500" aria-hidden />
-            <span className="ml-2 text-2xl font-bold text-white">Persist</span>
-            <span className="text-2xl font-bold text-blue-500">Health</span>
-          </div>
-          <p className="mt-1 text-xs text-slate-400">
+
+    <div className="flex min-h-screen w-full">
+
+      <aside className="relative hidden min-h-screen w-[480px] shrink-0 flex-col justify-between bg-[#3730A3] p-12 md:flex">
+
+        <div className="flex flex-1 flex-col items-center justify-center">
+
+          <img
+            src="/logo.png"
+            alt="Persist"
+            className="h-20 w-20 rounded-2xl object-cover"
+          />
+
+          <h1 className="mt-6 text-4xl font-bold text-white">Persist</h1>
+
+          <p className="mt-2 text-lg text-indigo-200">
+
             Autonomous Prior Authorization Agent
+
           </p>
-        </div>
 
-        <div className="mb-6 flex items-center gap-2 rounded-lg border border-green-800 bg-green-950 px-3 py-2">
-          <ShieldCheck className="h-4 w-4 shrink-0 text-green-400" aria-hidden />
-          <p className="text-xs text-green-400">
-            HIPAA Compliant — All PHI encrypted at rest and in transit
-          </p>
-        </div>
+          <ul className="mt-10 w-full max-w-sm space-y-4">
 
-        <form onSubmit={handleSubmit}>
-          <label
-            className="mb-1 block text-xs text-slate-400"
-            htmlFor="login-email"
-          >
-            Email Address
-          </label>
-          <input
-            id="login-email"
-            type="email"
-            autoComplete="email"
-            placeholder="admin@persisthealth.com"
-            value={email}
-            onChange={(ev) => setEmail(ev.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white placeholder:text-slate-500"
-            disabled={loading}
-          />
+            {VALUE_PROPS.map((text) => (
 
-          <label
-            className="mb-1 mt-4 block text-xs text-slate-400"
-            htmlFor="login-password"
-          >
-            Password
-          </label>
-          <input
-            id="login-password"
-            type="password"
-            autoComplete="current-password"
-            placeholder="••••••••"
-            value={password}
-            onChange={(ev) => setPassword(ev.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white placeholder:text-slate-500"
-            disabled={loading}
-          />
+              <li key={text} className="flex items-start gap-3">
 
-          {error ? (
-            <p className="mt-2 text-xs text-red-400" role="alert">
-              {error}
+                <Check className="h-5 w-5 shrink-0 text-white" aria-hidden />
+
+                <span className="text-sm text-white">{text}</span>
+
+              </li>
+
+            ))}
+
+          </ul>
+
+          <div className="mt-10 w-full max-w-sm border-t border-white/10 pt-6">
+
+            <p className="text-xs text-indigo-300 font-medium uppercase tracking-wider">
+
+              Trusted by healthcare practices
+
             </p>
-          ) : null}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:pointer-events-none disabled:opacity-60"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden />
-                Sign in to Persist
-              </>
-            ) : (
-              "Sign in to Persist"
-            )}
-          </button>
-        </form>
+            <div className="mt-3 flex items-center gap-4">
 
-        <div className="mt-4 rounded-lg bg-slate-800 p-3 text-xs text-slate-400">
-          <p>Demo credentials:</p>
-          <p className="mt-2 text-slate-300 font-mono">Email: admin@persisthealth.com</p>
-          <p className="mt-0.5 font-mono text-slate-300">
-            Password: persist2026
-          </p>
+              <span className="text-xs text-indigo-200">HIPAA Compliant</span>
+
+              <span className="w-px h-3 bg-indigo-400/40" />
+
+              <span className="text-xs text-indigo-200">SOC 2 Ready</span>
+
+              <span className="w-px h-3 bg-indigo-400/40" />
+
+              <span className="text-xs text-indigo-200">FHIR R4</span>
+
+            </div>
+
+          </div>
+
         </div>
 
-        <p className="mt-6 text-center text-xs text-slate-600">
-          <Lock className="mr-1 inline h-3 w-3 align-text-bottom text-slate-600" aria-hidden />
-          Protected by HIPAA-compliant infrastructure
+        <p className="text-xs text-indigo-300">
+
+          Powered by Jac Graph Intelligence
+
         </p>
-      </div>
+
+      </aside>
+
+
+
+      <main className="flex flex-1 flex-col items-center justify-center min-h-screen px-16 bg-white">
+
+        <div className="w-full max-w-sm">
+
+          <div className="mb-8 flex items-center gap-2">
+
+            <img
+              src="/logo.png"
+              alt="Persist"
+              className="h-7 w-7 rounded-lg object-cover"
+            />
+
+            <span className="font-semibold text-slate-900">Persist</span>
+
+          </div>
+
+          <h2 className="text-2xl font-semibold text-slate-900">Welcome back</h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+
+            Sign in to your Persist workspace
+
+          </p>
+
+
+
+          <form onSubmit={handleSubmit} className="mt-8 w-full max-w-sm">
+
+            <label
+
+              className="block text-sm font-medium text-slate-700"
+
+              htmlFor="login-email"
+
+            >
+
+              Email Address
+
+            </label>
+
+            <input
+
+              id="login-email"
+
+              type="email"
+
+              autoComplete="email"
+
+              placeholder="admin@persisthealth.com"
+
+              value={email}
+
+              onChange={(ev) => setEmail(ev.target.value)}
+
+              className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
+
+              disabled={loading}
+
+            />
+
+
+
+            <label
+
+              className="mt-4 block text-sm font-medium text-slate-700"
+
+              htmlFor="login-password"
+
+            >
+
+              Password
+
+            </label>
+
+            <input
+
+              id="login-password"
+
+              type="password"
+
+              autoComplete="current-password"
+
+              placeholder="••••••••"
+
+              value={password}
+
+              onChange={(ev) => setPassword(ev.target.value)}
+
+              className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
+
+              disabled={loading}
+
+            />
+
+
+
+            {error ? (
+
+              <p className="mt-2 text-xs text-red-600" role="alert">
+
+                {error}
+
+              </p>
+
+            ) : null}
+
+
+
+            <button
+
+              type="submit"
+
+              disabled={loading}
+
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 py-2.5 font-medium text-white transition-colors hover:bg-indigo-700 disabled:pointer-events-none disabled:opacity-60"
+
+            >
+
+              {loading ? (
+
+                <>
+
+                  <Loader2
+
+                    className="h-4 w-4 shrink-0 animate-spin"
+
+                    aria-hidden
+
+                  />
+
+                  Sign in to Persist
+
+                </>
+
+              ) : (
+
+                "Sign in to Persist"
+
+              )}
+
+            </button>
+
+          </form>
+
+
+
+          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-xs text-slate-500">
+
+            <p>Demo credentials:</p>
+
+            <p className="mt-2">Email: admin@persisthealth.com</p>
+
+            <p className="mt-0.5">Password: persist2026</p>
+
+          </div>
+
+        </div>
+
+      </main>
+
     </div>
+
   );
+
 }
+

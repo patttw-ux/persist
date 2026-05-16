@@ -23,6 +23,7 @@ import {
   Brain,
   Building2,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   Clock,
   Copy,
@@ -44,6 +45,7 @@ import {
   useState,
   type DragEvent,
 } from "react";
+import { motion } from "framer-motion";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -90,6 +92,56 @@ function createInitialSteps(): AgentStepState[] {
     status: "idle" as StepStatus,
     label,
   }));
+}
+
+function createStepsFromCaseData(caseData: CaseDetail): AgentStepState[] {
+  const steps = createInitialSteps();
+  const status = caseData.status;
+
+  const allDone = [
+    "appeal_filed",
+    "appeal_submitted",
+    "appeal_won",
+    "approved",
+    "denied_final",
+    "appeal_drafted",
+  ].includes(status);
+
+  const throughSubmit = [
+    "denied",
+    "p2p_requested",
+  ].includes(status);
+
+  if (allDone) {
+    return steps.map((s, i) => ({
+      ...s,
+      status: "done" as StepStatus,
+      detail: [
+        "PA requirement detected",
+        "Clinical documentation assembled",
+        "Submitted to payer via FHIR R4",
+        "Payer response received",
+        "Denial parsed and analyzed",
+        "Appeal viability scored",
+        "Appeal letter drafted and filed",
+      ][i],
+    }));
+  }
+
+  if (throughSubmit) {
+    return steps.map((s, i) => ({
+      ...s,
+      status: i < 4 ? ("done" as StepStatus) : ("idle" as StepStatus),
+      detail: i < 4 ? [
+        "PA requirement detected",
+        "Clinical documentation assembled",
+        "Submitted to payer via FHIR R4",
+        "Payer response received",
+      ][i] : undefined,
+    }));
+  }
+
+  return steps;
 }
 
 function mergeStepStatus(
@@ -253,7 +305,7 @@ function AppealTransmissionLog({
   }
 
   return (
-    <div className="mb-4 rounded-lg bg-slate-900 p-4 font-mono text-xs">
+    <div className="mb-4 rounded-xl bg-slate-900 p-4 font-mono text-xs">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span
@@ -681,6 +733,127 @@ function CaseDetailPageSkeleton() {
   );
 }
 
+interface PayerIntelData {
+  payer_name: string;
+  criteria_engine: string;
+  appeal_language_notes: string;
+  win_rate?: number;
+  patterns_learned?: number;
+}
+
+function PayerIntelligencePanel({ payerName }: { payerName: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [data, setData] = useState<PayerIntelData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!payerName) return;
+    setLoading(true);
+    api.getPayerProfile(payerName)
+      .then((result) => {
+        if ("error" in result) {
+          setData(null);
+        } else {
+          const p = result as PayerIntelData;
+          setData(p);
+        }
+      })
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
+  }, [payerName]);
+
+  if (loading) {
+    return (
+      <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="h-2 w-2 rounded-full bg-indigo-400 animate-pulse" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Payer Intelligence
+          </span>
+        </div>
+        <div className="space-y-2">
+          <div className="h-3 w-3/4 rounded bg-slate-100 animate-pulse" />
+          <div className="h-3 w-1/2 rounded bg-slate-100 animate-pulse" />
+          <div className="h-3 w-2/3 rounded bg-slate-100 animate-pulse" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  return (
+    <div className="border-t border-slate-100">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <div className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Payer Intelligence
+          </span>
+          {!expanded && (
+            <span className="text-xs text-slate-600 font-medium">
+              · {data.payer_name} · {data.criteria_engine}
+            </span>
+          )}
+        </div>
+        <ChevronDown
+          className={`h-3.5 w-3.5 text-slate-400 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {expanded && (
+        <div className="px-4 pb-4 space-y-2.5">
+          <p className="text-sm font-semibold text-slate-900">{data.payer_name}</p>
+
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-400">Criteria Engine</span>
+            <span className="text-xs font-semibold text-slate-700">{data.criteria_engine}</span>
+          </div>
+
+          {data.win_rate !== undefined && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-400">Win Rate</span>
+              <span className="text-xs font-semibold text-green-600">
+                {Math.round(data.win_rate * 100)}%
+              </span>
+            </div>
+          )}
+
+          {data.patterns_learned !== undefined && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-400">Patterns Learned</span>
+              <span className="text-xs font-semibold text-slate-700">
+                {data.patterns_learned} cases
+              </span>
+            </div>
+          )}
+
+          {data.appeal_language_notes && (
+            <div className="pt-2 border-t border-slate-100">
+              <p className="text-xs font-medium text-slate-400 mb-1">Appeal Strategy</p>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                {data.appeal_language_notes}
+              </p>
+            </div>
+          )}
+
+          <div className="pt-2 flex items-center gap-1.5">
+            <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
+              <circle cx="5" cy="5" r="4" stroke="#6366F1" strokeWidth="1.5" />
+              <circle cx="5" cy="5" r="1.5" fill="#6366F1" />
+            </svg>
+            <span className="text-xs text-indigo-400">Powered by Jac Graph Intelligence</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function CaseDetail() {
   const navigate = useNavigate();
   const { caseId } = useParams<{ caseId: string }>();
@@ -788,6 +961,7 @@ export function CaseDetail() {
     if (!dataForCase) {
       return;
     }
+    setSteps(caseData ? createStepsFromCaseData(caseData) : createInitialSteps());
     const shouldConnectStream =
       agentStreamKey > 0 ||
       dataForCase.status === "submitted" ||
@@ -1180,7 +1354,7 @@ export function CaseDetail() {
           <button
             type="button"
             onClick={() => navigate("/")}
-            className="mt-6 mb-4 flex cursor-pointer items-center gap-1 text-sm text-slate-500 hover:text-slate-900"
+            className="mb-6 flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors"
           >
             <ChevronLeft className="h-4 w-4" aria-hidden />
             Back to Queue
@@ -1189,19 +1363,24 @@ export function CaseDetail() {
           {showSkeleton ? (
             <CaseDetailPageSkeleton />
           ) : (
-            <div className="grid gap-6 lg:grid-cols-5">
+            <motion.div
+              className="grid gap-6 lg:grid-cols-5"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+            >
               <div className="lg:col-span-3">
                 {showError ? (
                   <p className="text-sm text-red-600">{caseLoadError}</p>
                 ) : caseData ? (
                   <>
-                    <section className="mb-4 rounded-lg border border-slate-200 bg-white p-6">
-                    <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
+                    <section className="mb-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-l-4 border-l-indigo-500 border-t-2 border-t-indigo-400">
+                    <h2 className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
                       Patient &amp; Insurance
                     </h2>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <p className="text-xl font-semibold text-slate-900">
+                        <p className="text-2xl font-bold text-slate-900">
                           {caseData.patient_name}
                         </p>
                       </div>
@@ -1225,7 +1404,7 @@ export function CaseDetail() {
                         </p>
                       </div>
                       <div>
-                        <span className="inline-block rounded bg-slate-100 px-2 py-0.5 font-mono text-sm text-slate-800">
+                        <span className="inline-block rounded-md bg-indigo-50 px-2 py-0.5 font-mono text-sm text-indigo-700 border border-indigo-100">
                           {caseData.cpt_code}
                         </span>
                       </div>
@@ -1238,67 +1417,55 @@ export function CaseDetail() {
                     </div>
                   </section>
 
-                  <section className="mb-4 rounded-lg border border-slate-200 bg-white p-6">
-                    <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
-                      Authorization Request
-                    </h2>
-                    <p className="text-lg font-semibold text-slate-900">
-                      {caseData.drug_name}
-                    </p>
-                    <p className="mt-2">
-                      <span className="font-mono text-sm text-slate-700">
-                        CPT {caseData.cpt_code}
-                      </span>
-                    </p>
-                    {caseData.diagnosis_codes.length > 0 ? (
-                      <div className="mt-3 flex flex-wrap gap-1">
-                        {caseData.diagnosis_codes.map((code) => (
-                          <span
-                            key={code}
-                            className="mr-1 inline-block rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-800"
-                          >
-                            {code}
-                          </span>
-                        ))}
+                  {caseData.denial ? (
+                    <section className="mb-4 rounded-xl border border-red-200 bg-red-50/40 p-5 shadow-sm border-l-4 border-l-red-500">
+                      <div className="mb-4 flex items-center gap-2">
+                        <AlertCircle
+                          className="h-5 w-5 shrink-0 text-red-500"
+                          aria-hidden
+                        />
+                        <span className="text-base font-bold text-red-800">
+                          Prior Auth Denied
+                        </span>
+                        <span className="ml-auto text-xs text-red-500">
+                          {caseData.denial.denial_date}
+                        </span>
                       </div>
-                    ) : null}
-                    <p className="mt-3 text-sm text-slate-500">
-                      Submitted:{" "}
-                      {formatRelativeTime(caseData.submitted_at)}
-                    </p>
-                    {caseData.monitor?.is_expedited ? (
-                      <Badge
-                        variant="outline"
-                        className="mt-3 border-amber-200 bg-amber-50 font-medium text-amber-800"
-                      >
-                        Expedited · 72h CMS
-                      </Badge>
-                    ) : null}
-                    {(caseData.status === "submitted" ||
-                      caseData.status === "pending") &&
-                    caseData.monitor &&
-                    !caseData.monitor.is_expedited ? (
-                      <button
-                        type="button"
-                        disabled={markExpeditedBusy}
-                        className="mt-3 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-50"
-                        onClick={() => void handleMarkExpedited()}
-                      >
-                        <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                        Mark as Expedited (72-hr deadline)
-                      </button>
-                    ) : null}
-                    {caseData.status === "approved" && caseData.preauth_ref ? (
-                      <p className="mt-2 font-mono text-sm text-green-700">
-                        Pre-auth ref: {caseData.preauth_ref}
+                      <span className="inline-block rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
+                        {DENIAL_TYPE_LABEL[caseData.denial.denial_type]}
+                      </span>
+                      <p className="mb-1 mt-4 text-xs font-semibold uppercase text-slate-500">
+                        Criterion Not Met
                       </p>
-                    ) : null}
-                  </section>
+                      <p className="text-sm leading-relaxed text-slate-800">
+                        {caseData.denial.criterion_failed}
+                      </p>
+                      <p className="mb-1 mt-3 text-xs font-semibold uppercase text-slate-500">
+                        Missing Documentation
+                      </p>
+                      <ul className="list-inside list-disc space-y-1">
+                        {caseData.denial.missing_documentation.map((item) => (
+                          <li
+                            key={item}
+                            className="text-sm text-slate-700"
+                          >
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mb-1 mt-3 text-xs font-semibold uppercase text-slate-500">
+                        What This Means
+                      </p>
+                      <p className="text-sm italic text-slate-600">
+                        {caseData.denial.denial_reason_summary}
+                      </p>
+                    </section>
+                  ) : null}
 
                   {!caseData.denial &&
                   (caseData.status === "submitted" ||
                     caseData.status === "pending") ? (
-                    <div className="mb-4 rounded-xl border-2 border-dashed border-blue-200 bg-blue-50 p-6">
+                    <div className="mb-4 rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/50 p-6">
                       <input
                         ref={pdfInputRef}
                         type="file"
@@ -1308,14 +1475,14 @@ export function CaseDetail() {
                       />
                       <div className="mb-4 flex items-start gap-2">
                         <Upload
-                          className="mt-0.5 h-5 w-5 shrink-0 text-blue-600"
+                          className="mt-0.5 h-5 w-5 shrink-0 text-indigo-600"
                           aria-hidden
                         />
                         <div>
-                          <p className="text-sm font-semibold text-blue-800">
+                          <p className="text-sm font-semibold text-indigo-800">
                             Upload Denial Letter
                           </p>
-                          <p className="mt-0.5 text-xs text-blue-600">
+                          <p className="mt-0.5 text-xs text-indigo-500">
                             When payer denies, upload the denial letter PDF
                           </p>
                         </div>
@@ -1329,10 +1496,10 @@ export function CaseDetail() {
                         onDrop={(e) => void handlePdfDrop(e)}
                       >
                         <FileText
-                          className="mx-auto mb-2 h-8 w-8 text-blue-300"
+                          className="mx-auto mb-2 h-8 w-8 text-indigo-300"
                           aria-hidden
                         />
-                        <p className="text-sm text-blue-600">
+                        <p className="text-sm text-indigo-500">
                           Drop PDF here or click to upload
                         </p>
                         <p className="mt-1 text-xs text-slate-400">
@@ -1372,7 +1539,7 @@ export function CaseDetail() {
                           }
                           rows={6}
                           placeholder="Paste full denial letter text…"
-                          className="mt-4 w-full resize-y rounded-md border border-blue-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus-visible:border-amber-400 focus-visible:ring-2 focus-visible:ring-amber-200 focus-visible:outline-none"
+                          className="mt-4 w-full resize-y rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus-visible:border-amber-400 focus-visible:ring-2 focus-visible:ring-amber-200 focus-visible:outline-none"
                         />
                       ) : null}
 
@@ -1384,7 +1551,7 @@ export function CaseDetail() {
                             ? manualDenialText.trim()
                             : extractedText.trim())
                         }
-                        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:pointer-events-none disabled:opacity-50"
+                        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:opacity-50 transition-colors"
                         onClick={() => void handleProcessDenialPdf()}
                       >
                         {pdfUploading ? (
@@ -1400,56 +1567,69 @@ export function CaseDetail() {
                     </div>
                   ) : null}
 
-                  {caseData.denial ? (
-                    <section className="mb-4 rounded-lg border-l-4 border-red-400 bg-red-50/30 p-6">
-                      <div className="mb-4 flex items-center gap-2">
-                        <AlertCircle
-                          className="h-5 w-5 shrink-0 text-red-500"
-                          aria-hidden
-                        />
-                        <span className="text-sm font-semibold text-red-800">
-                          Prior Auth Denied
-                        </span>
-                        <span className="ml-auto text-xs text-red-500">
-                          {caseData.denial.denial_date}
-                        </span>
-                      </div>
-                      <span className="inline-block rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
-                        {DENIAL_TYPE_LABEL[caseData.denial.denial_type]}
+                  <section className="mb-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
+                      Authorization Request
+                    </h2>
+                    <p className="text-xl font-bold text-slate-900">
+                      {caseData.drug_name}
+                    </p>
+                    <p className="mt-2">
+                      <span className="font-mono text-sm text-slate-700">
+                        CPT {caseData.cpt_code}
                       </span>
-                      <p className="mb-1 mt-4 text-xs font-semibold uppercase text-slate-500">
-                        Criterion Not Met
-                      </p>
-                      <p className="text-sm leading-relaxed text-slate-800">
-                        {caseData.denial.criterion_failed}
-                      </p>
-                      <p className="mb-1 mt-3 text-xs font-semibold uppercase text-slate-500">
-                        Missing Documentation
-                      </p>
-                      <ul className="list-inside list-disc space-y-1">
-                        {caseData.denial.missing_documentation.map((item) => (
-                          <li
-                            key={item}
-                            className="text-sm text-slate-700"
+                    </p>
+                    {caseData.diagnosis_codes.length > 0 ? (
+                      <div className="mt-3 flex flex-wrap gap-1">
+                        {caseData.diagnosis_codes.map((code) => (
+                          <span
+                            key={code}
+                            className="mr-1 inline-block rounded-md bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-600 border border-slate-200"
                           >
-                            {item}
-                          </li>
+                            {code}
+                          </span>
                         ))}
-                      </ul>
-                      <p className="mb-1 mt-3 text-xs font-semibold uppercase text-slate-500">
-                        What This Means
+                      </div>
+                    ) : null}
+                    <p className="mt-3 text-sm text-slate-500">
+                      Submitted:{" "}
+                      {formatRelativeTime(caseData.submitted_at)}
+                    </p>
+                    {caseData.monitor?.is_expedited ? (
+                      <Badge
+                        variant="outline"
+                        className="mt-3 border-amber-200 bg-amber-50 font-medium text-amber-800"
+                      >
+                        Expedited · 72h CMS
+                      </Badge>
+                    ) : null}
+                    {(caseData.status === "submitted" ||
+                      caseData.status === "pending") &&
+                    caseData.monitor &&
+                    !caseData.monitor.is_expedited ? (
+                      <button
+                        type="button"
+                        disabled={markExpeditedBusy}
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                        onClick={() => void handleMarkExpedited()}
+                      >
+                        <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        Mark as Expedited (72-hr deadline)
+                      </button>
+                    ) : null}
+                    {caseData.status === "approved" && caseData.preauth_ref ? (
+                      <p className="mt-2 font-mono text-sm text-green-700">
+                        Pre-auth ref: {caseData.preauth_ref}
                       </p>
-                      <p className="text-sm italic text-slate-600">
-                        {caseData.denial.denial_reason_summary}
-                      </p>
-                    </section>
-                  ) : null}
+                    ) : null}
+                  </section>
+
 
                   {caseData.denial &&
                   caseData.denial.appeal_viable === false &&
                   (caseData.status === "denied" ||
                     caseData.status === "p2p_requested") ? (
-                    <section className="mb-4 rounded-xl border border-purple-200 bg-purple-50 p-5">
+                    <section className="mb-4 rounded-xl border border-purple-200 bg-purple-50/60 p-5 shadow-sm">
                       <div className="flex gap-3">
                         <Phone
                           className="h-5 w-5 shrink-0 text-purple-600"
@@ -1524,22 +1704,28 @@ export function CaseDetail() {
 
                   {caseData.appeal ? (
                     <>
-                      <AppealLetterHero
-                        appeal={caseData.appeal}
-                        patientName={caseData.patient_name}
-                        memberId={caseData.member_id}
-                        payerName={caseData.payer_name}
-                        cptCode={caseData.cpt_code}
-                        onCopy={handleCopyLetter}
-                        onSubmit={() => void handleSubmitAppeal()}
-                        submitBusy={appealActionBusy}
-                      />
+                      <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.4, delay: 0.1 }}
+                      >
+                        <AppealLetterHero
+                          appeal={caseData.appeal}
+                          patientName={caseData.patient_name}
+                          memberId={caseData.member_id}
+                          payerName={caseData.payer_name}
+                          cptCode={caseData.cpt_code}
+                          onCopy={handleCopyLetter}
+                          onSubmit={() => void handleSubmitAppeal()}
+                          submitBusy={appealActionBusy}
+                        />
+                      </motion.div>
                       {(caseData.appeal.status === "submitted" ||
                         caseData.appeal.status === "appeal_submitted" ||
                         caseData.status === "approved" ||
                         caseData.status === "denied_final") ? (
-                        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-5">
-                          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        <div className="mb-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                          <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
                             Record Payer Response
                           </p>
                           {caseData.status === "approved" ? (
@@ -1601,28 +1787,28 @@ export function CaseDetail() {
             </div>
 
             <div className="lg:col-span-2">
-              <div className="sticky top-20 overflow-hidden rounded-lg border border-slate-200 bg-white">
-                <div className="flex items-center justify-between bg-slate-900 px-4 py-3">
+              <div className="sticky top-20 overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center justify-between bg-[#1E1B4B] px-4 py-3.5 border-b border-indigo-900/50">
                   <div className="flex min-w-0 flex-1 items-center">
                     <span
                       className={`h-2 w-2 shrink-0 rounded-full ${
                         agentStreaming
-                          ? "animate-pulse bg-green-400"
+                          ? "animate-pulse bg-emerald-400"
                           : "bg-slate-500"
                       }`}
                       aria-hidden
                     />
-                    <span className="ml-2 text-sm font-semibold text-white">
+                    <span className="ml-2 text-sm font-semibold text-white tracking-tight">
                       Persist Agent
                     </span>
-                    <span className="ml-2 hidden text-xs text-slate-400 sm:inline">
+                    <span className="ml-2 hidden text-xs text-indigo-300/70 sm:inline">
                       Autonomous Prior Auth
                     </span>
                   </div>
                   <div className="shrink-0">
                     {agentStreaming ? (
                       <Loader2
-                        className="h-4 w-4 animate-spin text-blue-400"
+                        className="h-4 w-4 animate-spin text-indigo-400"
                         aria-hidden
                       />
                     ) : agentStreamError ? (
@@ -1642,11 +1828,11 @@ export function CaseDetail() {
                 {steps.length > 0 ? (
                   <Progress
                     value={progressValue}
-                    className="h-1 rounded-none bg-slate-200 [&>div]:bg-blue-500"
+                    className="h-0.5 rounded-none bg-slate-100 [&>div]:bg-indigo-500"
                   />
                 ) : null}
 
-                <div className="space-y-1 px-4 py-3">
+                <div className="space-y-2 px-4 py-4">
                   {steps.map((s) => (
                     <AgentStepRow
                       key={s.step}
@@ -1685,9 +1871,13 @@ export function CaseDetail() {
                     }}
                   />
                 ) : null}
+
+                <div className="border-t border-slate-100 px-4 py-4">
+                  <PayerIntelligencePanel payerName={caseData?.payer_name ?? ""} />
+                </div>
               </div>
             </div>
-          </div>
+          </motion.div>
           )}
         </div>
       </main>

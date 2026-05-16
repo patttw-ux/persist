@@ -1,10 +1,10 @@
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import type { PreSubmissionAudit } from "@/lib/types";
 import {
@@ -84,9 +84,9 @@ const AUTOFILL_FORM_KEYS = new Set<string>([
 function inputClass(hasError: boolean, autofilled?: boolean): string {
   return [
     "flex h-10 w-full rounded-md border bg-white px-3 py-2 text-sm text-slate-900 shadow-sm ring-offset-white placeholder:text-slate-400",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2",
     hasError ? "border-red-500" : "border-slate-200",
-    autofilled ? "ring-1 ring-blue-300" : "",
+    autofilled ? "ring-1 ring-indigo-300" : "",
   ].join(" ");
 }
 
@@ -102,9 +102,9 @@ function treatmentAreaClass(
       : "border-slate-200";
   return [
     "flex min-h-[100px] w-full rounded-md border bg-white px-3 py-2 text-sm text-slate-900 shadow-sm ring-offset-white placeholder:text-slate-400",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2",
     border,
-    autofilled ? "ring-1 ring-blue-300" : "",
+    autofilled ? "ring-1 ring-indigo-300" : "",
   ].join(" ");
 }
 
@@ -206,7 +206,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
       .map((c) => c.trim())
       .filter(Boolean);
 
-  const ingestClinicalNoteFile = useCallback(
+  const handleClinicalNoteUpload = useCallback(
     (file: File) => {
       const lower = file.name.toLowerCase();
       if (!lower.endsWith(".pdf") && !lower.endsWith(".txt")) {
@@ -237,7 +237,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
               result.diagnosis_codes
                 ?.map((c) => String(c).trim())
                 .filter(Boolean)
-                .join(", ") ?? "";
+                .join(",") ?? "";
 
             const nextAutofill: AutofillKey[] = [];
             if (result.patient_name?.trim()) {
@@ -309,9 +309,9 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
       if (!f) {
         return;
       }
-      ingestClinicalNoteFile(f);
+      handleClinicalNoteUpload(f);
     },
-    [ingestClinicalNoteFile]
+    [handleClinicalNoteUpload]
   );
 
   const handleClinicalNoteDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
@@ -327,9 +327,9 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
       if (!f) {
         return;
       }
-      ingestClinicalNoteFile(f);
+      handleClinicalNoteUpload(f);
     },
-    [ingestClinicalNoteFile]
+    [handleClinicalNoteUpload]
   );
 
   const runSubmitPA = async () => {
@@ -442,29 +442,27 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
     !auditResult.submission_ready;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="flex w-full max-w-lg flex-col overflow-y-auto sm:max-w-lg"
-      >
-        <SheetHeader className="text-left">
-          <SheetTitle className="text-left text-lg font-semibold text-slate-900">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden p-0">
+        <DialogHeader className="border-b border-slate-100 px-6 py-5">
+          <DialogTitle className="text-left text-lg font-semibold text-slate-900">
             New Prior Authorization Request
-          </SheetTitle>
-          <SheetDescription className="mt-1 text-left text-sm text-slate-500">
+          </DialogTitle>
+          <DialogDescription className="mt-1 text-left text-sm text-slate-500">
             Persist will handle submission, monitoring, and appeals automatically
-          </SheetDescription>
-        </SheetHeader>
+          </DialogDescription>
+        </DialogHeader>
 
+        <div className="flex-1 overflow-y-auto px-6 py-5">
         <form onSubmit={(e) => void handleSubmit(e)} className="mt-6 space-y-4">
-          <div className="bg-blue-50 border-2 border-dashed border-blue-200 rounded-xl p-5 mb-6">
+          <div className="bg-indigo-50 border-2 border-dashed border-indigo-200 rounded-xl p-5 mb-6">
             <div className="flex items-start gap-2">
               <FileText
-                className="h-5 w-5 shrink-0 text-blue-600 mt-0.5"
+                className="h-5 w-5 shrink-0 text-indigo-600 mt-0.5"
                 aria-hidden
               />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-blue-800">
+                <p className="text-sm font-semibold text-indigo-800">
                   Upload Clinical Note
                 </p>
                 <p className="text-xs text-slate-500 mt-0.5">
@@ -498,7 +496,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
               aria-label="Upload clinical note PDF or text file"
               onDragOver={handleClinicalNoteDragOver}
               onDrop={(e) => void handleClinicalNoteDrop(e)}
-              className="mt-4 cursor-pointer rounded-lg border border-blue-100 bg-white/60 px-4 py-6 text-center transition-colors hover:bg-white/90"
+              className="mt-4 cursor-pointer rounded-lg border border-indigo-100 bg-white/60 px-4 py-6 text-center transition-colors hover:bg-white/90"
               onClick={() => {
                 if (!noteUploading) {
                   clinicalNoteInputRef.current?.click();
@@ -515,12 +513,12 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
             >
               {noteUploading ? (
                 <Loader2
-                  className="h-8 w-8 animate-spin text-blue-400 mx-auto mb-2"
+                  className="h-8 w-8 animate-spin text-indigo-400 mx-auto mb-2"
                   aria-hidden
                 />
               ) : (
                 <Upload
-                  className="h-8 w-8 text-blue-300 mx-auto mb-2"
+                  className="h-8 w-8 text-indigo-300 mx-auto mb-2"
                   aria-hidden
                 />
               )}
@@ -817,7 +815,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
                 type="button"
                 onClick={() => void handleNeutralContinue()}
                 disabled={submitting}
-                className="mt-4 inline-flex w-full items-center justify-center rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                className="mt-4 inline-flex w-full items-center justify-center rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
               >
                 Continue to submit
               </button>
@@ -829,7 +827,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
               <button
                 type="submit"
                 disabled={busy}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:pointer-events-none disabled:opacity-50"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:opacity-50"
               >
                 {auditLoading ? (
                   <>
@@ -860,7 +858,8 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
             </button>
           </div>
         </form>
-      </SheetContent>
-    </Sheet>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
