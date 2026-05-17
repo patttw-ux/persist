@@ -783,6 +783,33 @@ walker:pub get_dashboard_stats {
     }
 }
 
+walker:pub get_denial_patterns {
+    can fetch with Root entry {
+        patterns = [root->:HasDenialPattern:->][?:DenialPattern];
+        result = [];
+
+        for pattern in patterns {
+            result.append({
+                "pattern_id": jid(pattern),
+                "payer_name": pattern.payer_name,
+                "cpt_code": pattern.cpt_code,
+                "denial_type": pattern.denial_type,
+                "criterion_failed": pattern.criterion_failed,
+                "times_seen": pattern.times_seen,
+                "times_won": pattern.times_won,
+                "win_rate": pattern.win_rate,
+                "successful_appeal_language": pattern.successful_appeal_language[:200] if pattern.successful_appeal_language else ""
+            });
+        }
+
+        report {
+            "patterns": result,
+            "total_patterns": len(result),
+            "message": "Denial patterns from Jac graph memory"
+        };
+    }
+}
+
 walker:pub get_graph_snapshot {
     can fetch with Root entry {
         nodes: list = [];
