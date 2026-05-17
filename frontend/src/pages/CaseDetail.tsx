@@ -3,8 +3,8 @@ import { AppHeader } from "@/components/AppHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
+import { useCountUp } from "@/hooks/useCountUp";
 import { formatRelativeTime } from "@/lib/formatRelativeTime";
 import type {
   AgentStep as AgentStepState,
@@ -626,6 +626,8 @@ function AppealViabilityCard({
   appealActionBusy: boolean;
   onRunAgent: () => void;
 }) {
+  const animatedPercent = useCountUp(
+    viabilityPercent ?? 0, 1200);
   const [barFillPct, setBarFillPct] = useState(0);
   const targetWidth =
     viabilityPercent === null
@@ -658,9 +660,8 @@ function AppealViabilityCard({
         ) : (
           <>
             <span className={`text-5xl font-bold ${scoreTextClass}`}>
-              {viabilityPercent}
+              {animatedPercent}%
             </span>
-            <span className={`text-2xl font-bold ${scoreTextClass}`}>%</span>
             <span className="mb-1 ml-2 self-end text-xs text-slate-500">
               Viability Score
             </span>
@@ -707,45 +708,6 @@ function AppealViabilityCard({
           Persist Fought This Denial
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function CaseDetailPageSkeleton() {
-  return (
-    <div className="grid gap-6 lg:grid-cols-5">
-      <div className="space-y-4 lg:col-span-3">
-        <section className="rounded-lg border border-slate-200 bg-white p-6">
-          <Skeleton className="mb-4 h-4 w-48" />
-          <div className="grid grid-cols-2 gap-4">
-            <Skeleton className="h-8 w-56" />
-            <Skeleton className="h-4 w-36" />
-            <Skeleton className="h-4 w-52" />
-            <Skeleton className="h-4 w-40" />
-            <Skeleton className="h-6 w-24" />
-            <Skeleton className="h-6 w-32" />
-          </div>
-        </section>
-        <section className="rounded-lg border border-slate-200 bg-white p-6">
-          <Skeleton className="mb-4 h-4 w-40" />
-          <Skeleton className="h-6 w-3/4 max-w-md" />
-          <Skeleton className="mt-3 h-4 w-28" />
-          <Skeleton className="mt-4 h-16 w-full" />
-        </section>
-        <section className="rounded-lg border border-slate-200 bg-white p-6">
-          <Skeleton className="h-24 w-full" />
-        </section>
-      </div>
-      <div className="lg:col-span-2">
-        <div className="sticky top-20 overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <Skeleton className="h-12 w-full rounded-none bg-slate-900" />
-          <div className="space-y-2 px-4 py-4">
-            {Array.from({ length: 7 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full" />
-            ))}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -1411,7 +1373,47 @@ export function CaseDetail() {
                   Loading case...
                 </span>
               </div>
-              <CaseDetailPageSkeleton />
+              <div className="grid gap-6 lg:grid-cols-5">
+                <div className="lg:col-span-3 space-y-4">
+                  <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <div className="h-3 w-32 rounded-full bg-slate-200 animate-pulse mb-4" />
+                    <div className="h-7 w-48 rounded-lg bg-slate-200 animate-pulse mb-3" />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="h-3 w-28 rounded-full bg-slate-100 animate-pulse" />
+                      <div className="h-3 w-32 rounded-full bg-slate-100 animate-pulse" />
+                      <div className="h-3 w-24 rounded-full bg-slate-100 animate-pulse" />
+                      <div className="h-3 w-36 rounded-full bg-slate-100 animate-pulse" />
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <div className="h-3 w-40 rounded-full bg-slate-200 animate-pulse mb-4" />
+                    <div className="h-6 w-64 rounded-lg bg-slate-200 animate-pulse mb-3" />
+                    <div className="h-3 w-20 rounded-full bg-slate-100 animate-pulse mb-2" />
+                    <div className="h-5 w-16 rounded-md bg-slate-100 animate-pulse" />
+                  </div>
+                </div>
+
+                <div className="lg:col-span-2">
+                  <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                    <div className="bg-[#1E1B4B] px-4 py-3.5 flex items-center gap-2">
+                      <div className="h-2 w-2 rounded-full bg-slate-600" />
+                      <div className="h-3 w-24 rounded-full bg-slate-600 animate-pulse" />
+                    </div>
+                    <div className="p-4 space-y-3">
+                      {Array.from({ length: 7 }).map((_, i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <div className="h-4 w-4 rounded-full bg-slate-200 animate-pulse shrink-0" />
+                          <div
+                            className="h-3 rounded-full bg-slate-200 animate-pulse"
+                            style={{ width: `${60 + (i * 8) % 40}%` }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </motion.div>
           )}
           {!showSkeleton && (
