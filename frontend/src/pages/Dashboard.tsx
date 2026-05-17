@@ -1,7 +1,6 @@
 import { AppHeader } from "@/components/AppHeader";
 import { NewPASheet } from "@/components/NewPASheet";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GraphView } from "@/pages/GraphView";
 import { api } from "@/lib/api";
@@ -25,9 +24,11 @@ import {
   RefreshCw,
   Zap,
 } from "lucide-react";
+import { motion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { useCountUp } from "@/hooks/useCountUp";
 
 const PA_STATUS_SET = new Set<string>([
   "submitted",
@@ -121,32 +122,36 @@ function ActionCell({
 
 function TableSkeleton() {
   return (
-    <tbody>
-      {Array.from({ length: 4 }, (_, i) => (
+    <motion.tbody
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+    >
+      {Array.from({ length: 5 }, (_, i) => (
         <tr key={i} className="border-b border-slate-100 last:border-0">
-          <td className="px-4 py-3">
-            <Skeleton className="h-4 w-32" />
-            <Skeleton className="mt-1 h-3 w-20" />
+          <td className="px-4 py-4">
+            <div className="h-4 w-32 rounded-full bg-slate-200 animate-pulse mb-1.5" />
+            <div className="h-3 w-20 rounded-full bg-slate-100 animate-pulse" />
           </td>
-          <td className="px-4 py-3">
-            <Skeleton className="h-4 w-40" />
-            <Skeleton className="mt-1 h-3 w-16" />
+          <td className="px-4 py-4">
+            <div className="h-4 w-40 rounded-full bg-slate-200 animate-pulse mb-1.5" />
+            <div className="h-3 w-16 rounded-full bg-slate-100 animate-pulse" />
           </td>
-          <td className="px-4 py-3">
-            <Skeleton className="h-4 w-28" />
+          <td className="px-4 py-4">
+            <div className="h-4 w-28 rounded-full bg-slate-200 animate-pulse" />
           </td>
-          <td className="px-4 py-3">
-            <Skeleton className="h-3 w-20" />
+          <td className="px-4 py-4">
+            <div className="h-3 w-16 rounded-full bg-slate-200 animate-pulse" />
           </td>
-          <td className="px-4 py-3">
-            <Skeleton className="h-6 w-20 rounded-full" />
+          <td className="px-4 py-4">
+            <div className="h-6 w-24 rounded-full bg-slate-200 animate-pulse" />
           </td>
-          <td className="px-4 py-3">
-            <Skeleton className="h-8 w-24 rounded-md" />
+          <td className="px-4 py-4">
+            <div className="h-4 w-20 rounded-full bg-slate-100 animate-pulse" />
           </td>
         </tr>
       ))}
-    </tbody>
+    </motion.tbody>
   );
 }
 
@@ -165,6 +170,18 @@ export function Dashboard() {
   );
   const [activeTab, setActiveTab] = useState("queue");
   const [graphRefreshKey, setGraphRefreshKey] = useState(0);
+  const userName = sessionStorage.getItem("persist_user") ?? "there";
+  const displayName = userName.includes("@") ? userName.split("@")[0] : userName;
+
+  const countTotal = useCountUp(
+    dashboardStats?.total_cases ?? cases.length,
+    800
+  );
+  const countAppeals = useCountUp(dashboardStats?.appeals_filed ?? 0, 800);
+  const countPatterns = useCountUp(
+    dashboardStats?.denial_patterns_learned ?? 0,
+    800
+  );
 
   const refreshCmsDeadlines = useCallback(async () => {
     try {
@@ -266,27 +283,73 @@ export function Dashboard() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC]">
+    <div className="min-h-screen bg-[#F8FAFC] transition-opacity duration-300">
       <AppHeader />
-      <main className="pt-14">
+      <motion.main
+        className="pt-14"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.2 }}
+      >
         <div className="mx-auto max-w-7xl px-6 py-8">
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="mb-4"
+          >
+            <p className="text-xl font-semibold text-slate-800">
+              Welcome back,{" "}
+              <span className="text-indigo-600 capitalize">{displayName}</span>
+            </p>
+          </motion.div>
+          {loading && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex items-center gap-2 mb-4"
+            >
+              <div
+                className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce"
+                style={{ animationDelay: "0ms" }}
+              />
+              <div
+                className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce"
+                style={{ animationDelay: "150ms" }}
+              />
+              <div
+                className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce"
+                style={{ animationDelay: "300ms" }}
+              />
+              <span className="text-xs text-slate-400 ml-1">
+                Loading cases...
+              </span>
+            </motion.div>
+          )}
           <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.2 }}
+            >
               <h1 className="text-2xl font-semibold text-slate-900">
                 Prior Authorization Queue
               </h1>
               <p className="mt-1 text-sm text-slate-500">
                 Autonomous submission, monitoring, and appeal — zero physician time
               </p>
-            </div>
-            <button
+            </motion.div>
+            <motion.button
               type="button"
               onClick={() => setSheetOpen(true)}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
               className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
             >
               <Plus className="h-4 w-4" />
               New PA Request
-            </button>
+            </motion.button>
           </div>
 
           <Tabs
@@ -309,30 +372,65 @@ export function Dashboard() {
 
             <TabsContent value="queue" className="mt-0">
           {!loading && cases.length > 0 && (
-            <div className="mb-8 grid grid-cols-4 gap-4">
-              <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-t-2 border-t-indigo-500">
+            <motion.div
+              className="mb-8 grid grid-cols-4 gap-4"
+              initial="hidden"
+              animate="visible"
+              variants={{
+                hidden: {},
+                visible: { transition: { staggerChildren: 0.1 } },
+              }}
+            >
+              <motion.div
+                variants={{
+                  hidden: { opacity: 0 },
+                  visible: {
+                    opacity: 1,
+                    transition: { duration: 0.4 },
+                  },
+                }}
+                className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-t-2 border-t-indigo-500"
+              >
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Requests</p>
                   <FileText className="h-4 w-4 text-indigo-400" />
                 </div>
                 <p className="mt-4 text-4xl font-bold tracking-tight text-slate-900 tabular-nums">
-                  {dashboardStats?.total_cases ?? cases.length}
+                  {countTotal}
                 </p>
                 <p className="mt-1 text-sm text-slate-500">
                   {(dashboardStats?.submitted_pending ?? 0)} pending payer response
                 </p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-t-2 border-t-indigo-500">
+              </motion.div>
+              <motion.div
+                variants={{
+                  hidden: { opacity: 0 },
+                  visible: {
+                    opacity: 1,
+                    transition: { duration: 0.4 },
+                  },
+                }}
+                className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-t-2 border-t-indigo-500"
+              >
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Appeals Filed</p>
                   <Zap className="h-4 w-4 text-indigo-400" />
                 </div>
                 <p className="mt-4 text-4xl font-bold tracking-tight text-slate-900 tabular-nums">
-                  {dashboardStats?.appeals_filed ?? "--"}
+                  {countAppeals}
                 </p>
                 <p className="mt-1 text-sm text-slate-500">Autonomously by Persist</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-t-2 border-t-indigo-500">
+              </motion.div>
+              <motion.div
+                variants={{
+                  hidden: { opacity: 0 },
+                  visible: {
+                    opacity: 1,
+                    transition: { duration: 0.4 },
+                  },
+                }}
+                className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-t-2 border-t-indigo-500"
+              >
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Hours Saved</p>
                   <Clock className="h-4 w-4 text-indigo-400" />
@@ -341,18 +439,27 @@ export function Dashboard() {
                   {dashboardStats?.hours_saved ? `${dashboardStats.hours_saved.toFixed(1)}h` : "--"}
                 </p>
                 <p className="mt-1 text-sm text-slate-500">vs 2.5hrs manual per appeal</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-t-2 border-t-indigo-500">
+              </motion.div>
+              <motion.div
+                variants={{
+                  hidden: { opacity: 0 },
+                  visible: {
+                    opacity: 1,
+                    transition: { duration: 0.4 },
+                  },
+                }}
+                className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-t-2 border-t-indigo-500"
+              >
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Patterns Learned</p>
                   <Brain className="h-4 w-4 text-indigo-400" />
                 </div>
                 <p className="mt-4 text-4xl font-bold tracking-tight text-slate-900 tabular-nums">
-                  {dashboardStats?.denial_patterns_learned ?? "--"}
+                  {countPatterns}
                 </p>
                 <p className="mt-1 text-sm text-slate-500">Graph memory — getting smarter</p>
-              </div>
-            </div>
+              </motion.div>
+            </motion.div>
           )}
 
           {!loading &&
@@ -384,12 +491,14 @@ export function Dashboard() {
               {Array.from({ length: 4 }).map((_, i) => (
                 <div
                   key={i}
-                  className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+                  className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-t-2 border-t-indigo-100"
                 >
-                  <Skeleton className="h-5 w-5 rounded" />
-                  <Skeleton className="mt-3 h-9 w-12" />
-                  <Skeleton className="mt-2 h-4 w-24" />
-                  <Skeleton className="mt-2 h-4 w-32" />
+                  <div className="mb-4 flex items-center justify-between">
+                    <div className="h-3 w-24 rounded-full bg-slate-200 animate-pulse" />
+                    <div className="h-4 w-4 rounded bg-slate-200 animate-pulse" />
+                  </div>
+                  <div className="mb-2 h-10 w-16 rounded-lg bg-slate-200 animate-pulse" />
+                  <div className="h-3 w-32 rounded-full bg-slate-150 animate-pulse" />
                 </div>
               ))}
             </div>
@@ -417,12 +526,14 @@ export function Dashboard() {
           {(loading || cases.length > 0) && (
             <>
               <div className="mb-2 flex justify-end">
-                <button
+                <motion.button
                   type="button"
                   onClick={() => {
                     void loadCases();
                   }}
                   disabled={loading}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                   className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                   aria-label="Refresh queue"
                 >
@@ -430,41 +541,56 @@ export function Dashboard() {
                     className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
                   />
                   Refresh
-                </button>
+                </motion.button>
               </div>
 
-              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-                <table className="w-full min-w-[720px] table-fixed text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50">
-                      <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                        Patient
-                      </th>
-                      <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                        Service
-                      </th>
-                      <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                        Payer
-                      </th>
-                      <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                        Submitted
-                      </th>
-                      <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                        Status
-                      </th>
-                      <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                        Action
-                      </th>
-                    </tr>
-                  </thead>
-                  {loading ? (
-                    <TableSkeleton />
-                  ) : (
-                    <tbody>
+              <div className={loading ? "animate-pulse" : undefined}>
+                <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                  <table className="w-full min-w-[720px] table-fixed text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50">
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          Patient
+                        </th>
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          Service
+                        </th>
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          Payer
+                        </th>
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          Submitted
+                        </th>
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          Status
+                        </th>
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          Action
+                        </th>
+                      </tr>
+                    </thead>
+                    {loading ? (
+                      <TableSkeleton />
+                    ) : (
+                    <motion.tbody
+                      initial="hidden"
+                      animate="visible"
+                      variants={{
+                        hidden: {},
+                        visible: { transition: { staggerChildren: 0.06 } },
+                      }}
+                    >
                       {cases.map((c) => (
-                        <tr
+                        <motion.tr
                           key={c.case_id}
-                          className="cursor-pointer border-b border-slate-100 transition-colors duration-100 last:border-0 hover:bg-indigo-50/40"
+                          variants={{
+                            hidden: { opacity: 0 },
+                            visible: {
+                              opacity: 1,
+                              transition: { duration: 0.25 },
+                            },
+                          }}
+                          className="cursor-pointer border-b border-slate-100 transition-colors duration-100 transition-all duration-150 last:border-0 hover:bg-indigo-50/40"
                           onClick={() => navigate(`/case/${c.case_id}`)}
                         >
                           <td className="px-4 py-3">
@@ -495,11 +621,12 @@ export function Dashboard() {
                               agentRunning={autoRunningIds.includes(c.case_id)}
                             />
                           </td>
-                        </tr>
+                        </motion.tr>
                       ))}
-                    </tbody>
-                  )}
-                </table>
+                    </motion.tbody>
+                    )}
+                  </table>
+                </div>
               </div>
               <p className="mt-6 text-center text-xs text-slate-400">
                 All patient data is Protected Health Information (PHI) handled in
@@ -520,7 +647,7 @@ export function Dashboard() {
             </TabsContent>
           </Tabs>
         </div>
-      </main>
+      </motion.main>
 
       <NewPASheet
         open={sheetOpen}

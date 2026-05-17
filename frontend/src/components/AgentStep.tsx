@@ -1,3 +1,4 @@
+import { motion } from "framer-motion";
 import {
   CheckCircle2,
   Circle,
@@ -34,7 +35,13 @@ function StatusIcon({ status }: { status: StepStatus }) {
       );
     case "done":
       return (
-        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
+        <motion.span
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: "spring", stiffness: 400, damping: 20 }}
+        >
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
+        </motion.span>
       );
     case "error":
       return <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />;
@@ -74,7 +81,12 @@ export function AgentStep({
       : null;
 
   return (
-    <div className="flex flex-row gap-3">
+    <motion.div
+      className="flex flex-row gap-3"
+      initial={{ opacity: 0, x: -8 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+    >
       <StatusIcon status={status} />
 
       <div className="min-w-0 flex-1">
@@ -99,6 +111,6 @@ export function AgentStep({
       {durationMs !== undefined && status === "done" && (
         <span className="shrink-0 text-xs text-slate-400">{durationMs}ms</span>
       )}
-    </div>
+    </motion.div>
   );
 }

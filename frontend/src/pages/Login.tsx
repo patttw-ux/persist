@@ -1,4 +1,5 @@
 import { Check, Loader2 } from "lucide-react";
+import { motion } from "framer-motion";
 
 import type { FormEvent } from "react";
 
@@ -76,11 +77,16 @@ export function Login({ onLogin }: LoginProps) {
 
   return (
 
-    <div className="flex min-h-screen w-full">
+    <div className="flex h-screen w-full overflow-hidden">
 
-      <aside className="relative hidden min-h-screen w-[480px] shrink-0 flex-col justify-between bg-[#3730A3] p-12 md:flex">
+      <aside className="relative hidden h-screen w-[480px] shrink-0 flex-col justify-between bg-[#3730A3] p-12 md:flex">
 
-        <div className="flex flex-1 flex-col items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, x: -24 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="flex flex-1 flex-col items-center justify-center gap-8 w-full"
+        >
 
           <img
             src="/logo.png"
@@ -88,15 +94,15 @@ export function Login({ onLogin }: LoginProps) {
             className="h-20 w-20 rounded-2xl object-cover"
           />
 
-          <h1 className="mt-6 text-4xl font-bold text-white">Persist</h1>
+          <h1 className="text-4xl font-bold text-white text-center">Persist</h1>
 
-          <p className="mt-2 text-lg text-indigo-200">
+          <p className="text-lg text-indigo-200 text-center">
 
             Autonomous Prior Authorization Agent
 
           </p>
 
-          <ul className="mt-10 w-full max-w-sm space-y-4">
+          <ul className="w-full max-w-sm space-y-4">
 
             {VALUE_PROPS.map((text) => (
 
@@ -112,7 +118,7 @@ export function Login({ onLogin }: LoginProps) {
 
           </ul>
 
-          <div className="mt-10 w-full max-w-sm border-t border-white/10 pt-6">
+          <div className="w-full max-w-sm border-t border-white/10 pt-6">
 
             <p className="text-xs text-indigo-300 font-medium uppercase tracking-wider">
 
@@ -136,7 +142,7 @@ export function Login({ onLogin }: LoginProps) {
 
           </div>
 
-        </div>
+        </motion.div>
 
         <p className="text-xs text-indigo-300">
 
@@ -148,11 +154,18 @@ export function Login({ onLogin }: LoginProps) {
 
 
 
-      <main className="flex flex-1 flex-col items-center justify-center min-h-screen px-16 bg-white">
+      <main className="flex flex-1 flex-col h-screen overflow-y-auto bg-white">
 
-        <div className="w-full max-w-sm">
+        <div className="flex flex-1 items-center justify-center px-16 py-12">
 
-          <div className="mb-8 flex items-center gap-2">
+          <motion.div
+            className="w-full max-w-sm"
+            initial={{ opacity: 0, x: 24 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+          >
+
+          <div className="mb-6 flex items-center gap-2">
 
             <img
               src="/logo.png"
@@ -256,12 +269,14 @@ export function Login({ onLogin }: LoginProps) {
 
 
 
-            <button
+            <motion.button
 
               type="submit"
 
               disabled={loading}
 
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.98 }}
               className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 py-2.5 font-medium text-white transition-colors hover:bg-indigo-700 disabled:pointer-events-none disabled:opacity-60"
 
             >
@@ -288,7 +303,7 @@ export function Login({ onLogin }: LoginProps) {
 
               )}
 
-            </button>
+            </motion.button>
 
           </form>
 
@@ -303,6 +318,8 @@ export function Login({ onLogin }: LoginProps) {
             <p className="mt-0.5">Password: persist2026</p>
 
           </div>
+
+        </motion.div>
 
         </div>
 

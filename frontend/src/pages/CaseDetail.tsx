@@ -45,7 +45,7 @@ import {
   useState,
   type DragEvent,
 } from "react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -550,29 +550,46 @@ function AppealLetterHero({
           <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
             Clinical Evidence Cited
           </p>
-          <div>
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            variants={{
+              hidden: {},
+              visible: { transition: { staggerChildren: 0.08 } },
+            }}
+          >
             {appeal.evidence_cited.map((cite) => (
-              <span
+              <motion.span
                 key={cite}
+                variants={{
+                  hidden: { opacity: 0, y: 6 },
+                  visible: {
+                    opacity: 1,
+                    y: 0,
+                    transition: { duration: 0.3 },
+                  },
+                }}
                 className="mb-1 mr-1 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700"
               >
                 <BookOpen className="h-3 w-3 shrink-0" aria-hidden />
                 {cite}
-              </span>
+              </motion.span>
             ))}
-          </div>
+          </motion.div>
         </div>
       ) : null}
 
       <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <button
+        <motion.button
           type="button"
           onClick={onCopy}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.97 }}
           className="inline-flex items-center gap-2 rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200/60"
         >
           <Copy className="h-4 w-4 shrink-0" aria-hidden />
           Copy Letter
-        </button>
+        </motion.button>
         <div className="flex items-center gap-2 sm:justify-end">
           {appeal.status === "drafted" ? (
             <button
@@ -805,8 +822,16 @@ function PayerIntelligencePanel({ payerName }: { payerName: string }) {
         />
       </button>
 
-      {expanded && (
-        <div className="px-4 pb-4 space-y-2.5">
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            key="payer-intel-content"
+            className="px-4 pb-4 space-y-2.5"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+          >
           <p className="text-sm font-semibold text-slate-900">{data.payer_name}</p>
 
           <div className="flex items-center justify-between">
@@ -848,8 +873,9 @@ function PayerIntelligencePanel({ payerName }: { payerName: string }) {
             </svg>
             <span className="text-xs text-indigo-400">Powered by Jac Graph Intelligence</span>
           </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1351,18 +1377,44 @@ export function CaseDetail() {
       <AppHeader />
       <main className="pt-14">
         <div className="mx-auto max-w-7xl px-6 py-8">
-          <button
+          <motion.button
             type="button"
             onClick={() => navigate("/")}
+            whileHover={{ x: -2 }}
+            whileTap={{ scale: 0.97 }}
             className="mb-6 flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors"
           >
             <ChevronLeft className="h-4 w-4" aria-hidden />
             Back to Queue
-          </button>
+          </motion.button>
 
-          {showSkeleton ? (
-            <CaseDetailPageSkeleton />
-          ) : (
+          {showSkeleton && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="flex items-center gap-2 mb-6">
+                <div
+                  className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce"
+                  style={{ animationDelay: "0ms" }}
+                />
+                <div
+                  className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce"
+                  style={{ animationDelay: "150ms" }}
+                />
+                <div
+                  className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce"
+                  style={{ animationDelay: "300ms" }}
+                />
+                <span className="text-xs text-slate-400 ml-1">
+                  Loading case...
+                </span>
+              </div>
+              <CaseDetailPageSkeleton />
+            </motion.div>
+          )}
+          {!showSkeleton && (
             <motion.div
               className="grid gap-6 lg:grid-cols-5"
               initial={{ opacity: 0, y: 12 }}
@@ -1418,7 +1470,12 @@ export function CaseDetail() {
                   </section>
 
                   {caseData.denial ? (
-                    <section className="mb-4 rounded-xl border border-red-200 bg-red-50/40 p-5 shadow-sm border-l-4 border-l-red-500">
+                    <motion.section
+                      className="mb-4 rounded-xl border border-red-200 bg-red-50/40 p-5 shadow-sm border-l-4 border-l-red-500"
+                      initial={{ opacity: 0, x: -12 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.4, ease: "easeOut" }}
+                    >
                       <div className="mb-4 flex items-center gap-2">
                         <AlertCircle
                           className="h-5 w-5 shrink-0 text-red-500"
@@ -1459,7 +1516,7 @@ export function CaseDetail() {
                       <p className="text-sm italic text-slate-600">
                         {caseData.denial.denial_reason_summary}
                       </p>
-                    </section>
+                    </motion.section>
                   ) : null}
 
                   {!caseData.denial &&
@@ -1752,10 +1809,12 @@ export function CaseDetail() {
                             </div>
                           ) : (
                             <div className="flex flex-wrap gap-3">
-                              <button
+                              <motion.button
                                 type="button"
                                 className="inline-flex flex-1 min-w-[140px] items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-green-700 disabled:pointer-events-none disabled:opacity-50"
                                 disabled={outcomeBusy}
+                                whileHover={{ scale: 1.01 }}
+                                whileTap={{ scale: 0.98 }}
                                 onClick={() => void markOutcome("won")}
                               >
                                 <CheckCircle2
@@ -1763,11 +1822,13 @@ export function CaseDetail() {
                                   aria-hidden
                                 />
                                 Appeal Won
-                              </button>
-                              <button
+                              </motion.button>
+                              <motion.button
                                 type="button"
                                 className="inline-flex flex-1 min-w-[140px] items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:pointer-events-none disabled:opacity-50"
                                 disabled={outcomeBusy}
+                                whileHover={{ scale: 1.01 }}
+                                whileTap={{ scale: 0.98 }}
                                 onClick={() => void markOutcome("lost")}
                               >
                                 <XCircle
@@ -1775,7 +1836,7 @@ export function CaseDetail() {
                                   aria-hidden
                                 />
                                 Appeal Denied
-                              </button>
+                              </motion.button>
                             </div>
                           )}
                         </div>

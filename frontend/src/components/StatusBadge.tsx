@@ -1,3 +1,4 @@
+import { motion } from "framer-motion";
 import type { PAStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -43,7 +44,10 @@ export function StatusBadge({ status, size = "default" }: StatusBadgeProps) {
   const variantKey = config.variant;
 
   return (
-    <span
+    <motion.span
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.2 }}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium",
         variants[variantKey],
@@ -55,6 +59,6 @@ export function StatusBadge({ status, size = "default" }: StatusBadgeProps) {
         aria-hidden
       />
       {config.label}
-    </span>
+    </motion.span>
   );
 }

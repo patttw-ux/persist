@@ -14,6 +14,7 @@ import {
   Loader2,
   Upload,
 } from "lucide-react";
+import { motion } from "framer-motion";
 import {
   type ChangeEvent,
   type DragEvent,
@@ -24,6 +25,11 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+
+const fieldVariants = {
+  hidden: { opacity: 0, y: 8 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.25 } },
+};
 
 const PAYER_OPTIONS = [
   "UnitedHealthcare",
@@ -496,7 +502,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
               aria-label="Upload clinical note PDF or text file"
               onDragOver={handleClinicalNoteDragOver}
               onDrop={(e) => void handleClinicalNoteDrop(e)}
-              className="mt-4 cursor-pointer rounded-lg border border-indigo-100 bg-white/60 px-4 py-6 text-center transition-colors hover:bg-white/90"
+              className="mt-4 cursor-pointer rounded-lg border border-indigo-100 bg-white/60 px-4 py-6 text-center transition-colors transition-all duration-200 hover:bg-white/90"
               onClick={() => {
                 if (!noteUploading) {
                   clinicalNoteInputRef.current?.click();
@@ -540,6 +546,16 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
             />
           </div>
 
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            variants={{
+              hidden: {},
+              visible: { transition: { staggerChildren: 0.05 } },
+            }}
+            className="space-y-4"
+          >
+          <motion.div variants={fieldVariants}>
           <div>
             <label
               htmlFor="newpa-patient_name"
@@ -564,7 +580,9 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
               </p>
             ) : null}
           </div>
+          </motion.div>
 
+          <motion.div variants={fieldVariants}>
           <div>
             <label
               htmlFor="newpa-dob"
@@ -584,7 +602,9 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
               <p className="mt-1 text-sm text-red-600">{fieldErrors.dob}</p>
             ) : null}
           </div>
+          </motion.div>
 
+          <motion.div variants={fieldVariants}>
           <div>
             <label
               htmlFor="newpa-member_id"
@@ -606,7 +626,9 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
               </p>
             ) : null}
           </div>
+          </motion.div>
 
+          <motion.div variants={fieldVariants}>
           <div>
             <label
               htmlFor="newpa-payer_name"
@@ -636,7 +658,9 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
               </p>
             ) : null}
           </div>
+          </motion.div>
 
+          <motion.div variants={fieldVariants}>
           <div>
             <label
               htmlFor="newpa-cpt_code"
@@ -652,7 +676,9 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
               className={`${inputClass(false, isAutofilled("cpt_code"))} font-mono`}
             />
           </div>
+          </motion.div>
 
+          <motion.div variants={fieldVariants}>
           <div>
             <label
               htmlFor="newpa-drug_name"
@@ -668,7 +694,9 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
               className={inputClass(false, isAutofilled("drug_name"))}
             />
           </div>
+          </motion.div>
 
+          <motion.div variants={fieldVariants}>
           <div>
             <label
               htmlFor="newpa-diagnosis"
@@ -684,7 +712,9 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
               className={`${inputClass(false, isAutofilled("diagnosis_icd10"))} font-mono`}
             />
           </div>
+          </motion.div>
 
+          <motion.div variants={fieldVariants}>
           <div>
             <label
               htmlFor="newpa-treatment_history"
@@ -713,6 +743,8 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
               </p>
             ) : null}
           </div>
+          </motion.div>
+          </motion.div>
 
           {showCritical ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">

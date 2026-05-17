@@ -1,24 +1,14 @@
-import { Clock, LogOut, TrendingDown, Trophy } from "lucide-react";
-import type { ComponentType, ReactNode } from "react";
-
-function StatPill({
-  icon: Icon,
-  iconClassName,
-  children,
-}: {
-  icon: ComponentType<{ className?: string }>;
-  iconClassName?: string;
-  children: ReactNode;
-}) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-3 py-1 text-xs text-slate-600">
-      <Icon className={iconClassName ?? "h-3.5 w-3.5 text-slate-500"} />
-      {children}
-    </span>
-  );
-}
+import { LogOut, Settings } from "lucide-react";
+import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
 
 export function AppHeader() {
+  const [currentTime, setCurrentTime] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
   return (
     <header className="fixed top-0 z-50 w-full border-t-2 border-[#4F46E5] border-b border-[#E2E8F0] bg-white">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
@@ -34,16 +24,37 @@ export function AppHeader() {
             Autonomous Prior Authorization
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-3 py-1 text-xs font-medium text-green-700">
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green-600" aria-hidden />
-            HIPAA
+        <motion.div className="flex items-center gap-2">
+          <span className="text-xs text-slate-500">
+            {currentTime.toLocaleDateString("en-US", {
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+            })}
+            {" · "}
+            {currentTime.toLocaleTimeString("en-US", {
+              hour: "numeric",
+              minute: "2-digit",
+              hour12: true,
+            })}
           </span>
-          <StatPill icon={TrendingDown} iconClassName="h-3.5 w-3.5 text-indigo-500">
-            39 req/week
-          </StatPill>
-          <StatPill icon={Clock}>13hrs saved</StatPill>
-          <StatPill icon={Trophy}>81.7% appeals won</StatPill>
+          <button
+            type="button"
+            onClick={() => {
+              const name = window.prompt(
+                "Update display name:",
+                sessionStorage.getItem("persist_user") ?? ""
+              );
+              if (name && name.trim()) {
+                sessionStorage.setItem("persist_user", name.trim());
+                window.location.reload();
+              }
+            }}
+            className="rounded-md p-1.5 text-slate-400 transition-colors hover:text-slate-700"
+            aria-label="Settings"
+          >
+            <Settings className="h-4 w-4" aria-hidden />
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -56,7 +67,7 @@ export function AppHeader() {
           >
             <LogOut className="h-4 w-4" aria-hidden />
           </button>
-        </div>
+        </motion.div>
       </div>
     </header>
   );
