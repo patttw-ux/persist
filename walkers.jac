@@ -783,6 +783,151 @@ walker:pub get_dashboard_stats {
     }
 }
 
+walker:pub get_graph_snapshot {
+    can fetch with Root entry {
+        nodes: list = [];
+        edges: list = [];
+
+        nodes.append({
+            "id": "root",
+            "type": "root",
+            "label": "Root",
+            "data": {}
+        });
+
+        all_cases: list[PatientCase] = [root-->][?:PatientCase];
+        for patient_case in all_cases {
+            case_id: str = jid(patient_case);
+            nodes.append({
+                "id": case_id,
+                "type": "PatientCase",
+                "label": patient_case.patient_name,
+                "data": {
+                    "payer": patient_case.payer_name,
+                    "member_id": patient_case.member_id
+                }
+            });
+            edges.append({
+                "source": "root",
+                "target": case_id,
+                "type": "HasCase"
+            });
+
+            requests: list[PARequest] = [patient_case->:HasRequest:->][?:PARequest];
+            for req in requests {
+                req_id: str = jid(req);
+                nodes.append({
+                    "id": req_id,
+                    "type": "PARequest",
+                    "label": req.cpt_code,
+                    "data": {
+                        "drug": req.drug_name,
+                        "status": req.status
+                    }
+                });
+                edges.append({
+                    "source": case_id,
+                    "target": req_id,
+                    "type": "HasRequest"
+                });
+
+                denials: list[DenialRecord] = [req->:HasDenial:->][?:DenialRecord];
+                for denial in denials {
+                    denial_id: str = jid(denial);
+                    nodes.append({
+                        "id": denial_id,
+                        "type": "DenialRecord",
+                        "label": denial.denial_type,
+                        "data": {
+                            "viable": denial.appeal_viable,
+                            "score": denial.appeal_viability_score
+                        }
+                    });
+                    edges.append({
+                        "source": req_id,
+                        "target": denial_id,
+                        "type": "HasDenial"
+                    });
+
+                    appeals: list[AppealRecord] = [denial->:HasAppeal:->][?:AppealRecord];
+                    for appeal in appeals {
+                        appeal_id: str = jid(appeal);
+                        subject_preview: str = appeal.subject_line[:30] if appeal.subject_line else "";
+                        nodes.append({
+                            "id": appeal_id,
+                            "type": "AppealRecord",
+                            "label": appeal.status,
+                            "data": {
+                                "subject": subject_preview
+                            }
+                        });
+                        edges.append({
+                            "source": denial_id,
+                            "target": appeal_id,
+                            "type": "HasAppeal"
+                        });
+                    }
+                }
+            }
+        }
+
+        payer_profiles: list[PayerProfile] = [root->:HasPayerProfile:->][?:PayerProfile];
+        for payer in payer_profiles {
+            payer_id: str = jid(payer);
+            nodes.append({
+                "id": payer_id,
+                "type": "PayerProfile",
+                "label": payer.payer_name,
+                "data": {
+                    "engine": payer.criteria_engine,
+                    "denial_rate": payer.avg_denial_rate
+                }
+            });
+            edges.append({
+                "source": "root",
+                "target": payer_id,
+                "type": "HasPayerProfile"
+            });
+        }
+
+        patterns: list[DenialPattern] = [root->:HasDenialPattern:->][?:DenialPattern];
+        for pattern in patterns {
+            pattern_id: str = jid(pattern);
+            nodes.append({
+                "id": pattern_id,
+                "type": "DenialPattern",
+                "label": pattern.denial_type,
+                "data": {
+                    "payer": pattern.payer_name,
+                    "win_rate": pattern.win_rate,
+                    "times_seen": pattern.times_seen
+                }
+            });
+            edges.append({
+                "source": "root",
+                "target": pattern_id,
+                "type": "HasDenialPattern"
+            });
+        }
+
+        report {
+            "nodes": nodes,
+            "edges": edges,
+            "node_count": len(nodes),
+            "edge_count": len(edges),
+            "node_types": [
+                "root",
+                "PatientCase",
+                "PARequest",
+                "DenialRecord",
+                "AppealRecord",
+                "PayerProfile",
+                "DenialPattern"
+            ]
+        };
+    }
+}
+
 walker:pub get_case_detail {
     has case_id: str;
 

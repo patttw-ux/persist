@@ -2,6 +2,8 @@ import { AppHeader } from "@/components/AppHeader";
 import { NewPASheet } from "@/components/NewPASheet";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { GraphView } from "@/pages/GraphView";
 import { api } from "@/lib/api";
 import { formatRelativeTime } from "@/lib/formatRelativeTime";
 import type {
@@ -18,6 +20,7 @@ import {
   Clock,
   FileText,
   FileX,
+  Network,
   Plus,
   RefreshCw,
   Zap,
@@ -160,6 +163,8 @@ export function Dashboard() {
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(
     null
   );
+  const [activeTab, setActiveTab] = useState("queue");
+  const [graphRefreshKey, setGraphRefreshKey] = useState(0);
 
   const refreshCmsDeadlines = useCallback(async () => {
     try {
@@ -235,6 +240,7 @@ export function Dashboard() {
       }
       scheduleDeniedAutoProcess(normalized);
       await refreshCmsDeadlines();
+      setGraphRefreshKey((k) => k + 1);
     } catch (e) {
       const message =
         e instanceof Error ? e.message : "Could not reach the server to load cases.";
@@ -283,6 +289,25 @@ export function Dashboard() {
             </button>
           </div>
 
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) => {
+              setActiveTab(value);
+              if (value === "graph") {
+                setGraphRefreshKey((k) => k + 1);
+              }
+            }}
+            className="w-full"
+          >
+            <TabsList className="mb-6 bg-slate-100">
+              <TabsTrigger value="queue">Prior Auth Queue</TabsTrigger>
+              <TabsTrigger value="graph" className="gap-1.5">
+                <Network className="h-3.5 w-3.5" aria-hidden />
+                OSP Graph
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="queue" className="mt-0">
           {!loading && cases.length > 0 && (
             <div className="mb-8 grid grid-cols-4 gap-4">
               <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-t-2 border-t-indigo-500">
@@ -482,6 +507,18 @@ export function Dashboard() {
               </p>
             </>
           )}
+            </TabsContent>
+
+            <TabsContent value="graph" className="mt-0">
+              <GraphView
+                refreshKey={graphRefreshKey}
+                onPatientCaseClick={(id) => navigate(`/case/${id}`)}
+              />
+              <p className="mt-4 text-center text-xs text-slate-400">
+                Live Jac OSP graph — PHI handled per HIPAA 45 CFR §164
+              </p>
+            </TabsContent>
+          </Tabs>
         </div>
       </main>
 
