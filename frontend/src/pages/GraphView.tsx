@@ -264,7 +264,11 @@ export function GraphView({ refreshKey = 0, onPatientCaseClick }: GraphViewProps
         </div>
       </div>
 
-      <div ref={containerRef} className="relative w-full h-[600px]">
+      <div
+        ref={containerRef}
+        className="relative w-full h-[600px]"
+        style={{ isolation: "isolate" }}
+      >
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-950">
             <p className="text-sm text-slate-400">Loading OSP graph snapshot…</p>
@@ -303,6 +307,10 @@ export function GraphView({ refreshKey = 0, onPatientCaseClick }: GraphViewProps
               className="block"
               role="img"
               aria-label="Jac OSP force-directed graph"
+              style={{
+                transform: "translateZ(0)",
+                willChange: "transform",
+              }}
             />
             <div className="pointer-events-none absolute bottom-3 left-3 rounded-lg border border-slate-800 bg-slate-900/90 px-3 py-2">
               <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
