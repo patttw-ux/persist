@@ -316,7 +316,7 @@ export function Dashboard() {
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
-            className="mb-4"
+            className="mb-6"
           >
             <p className="mt-0.5 text-xl font-semibold tracking-tight text-slate-800">
               Welcome back,{" "}
@@ -347,19 +347,19 @@ export function Dashboard() {
               </span>
             </motion.div>
           )}
-          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.2 }}
-            >
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-                Prior Authorization Queue
-              </h1>
-              <p className="mt-1 text-sm text-slate-500">
-                Autonomous submission, monitoring, and appeal — zero physician time
-              </p>
-            </motion.div>
+          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.2 }}
+          >
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+              Prior Authorization Queue
+            </h1>
+            <p className="mt-1 text-sm font-medium text-slate-600">
+              Autonomous submission, monitoring, and appeal — zero physician time
+            </p>
+          </motion.div>
             <motion.button
               type="button"
               onClick={() => setSheetOpen(true)}
@@ -382,9 +382,17 @@ export function Dashboard() {
             }}
             className="w-full"
           >
-            <TabsList className="mb-6 bg-slate-100">
-              <TabsTrigger value="queue">Prior Auth Queue</TabsTrigger>
-              <TabsTrigger value="graph" className="gap-1.5">
+            <TabsList className="mb-6 border-b border-slate-200 bg-transparent rounded-none h-auto p-0 gap-0 w-full justify-start">
+              <TabsTrigger
+                value="queue"
+                className="rounded-none border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-slate-500 data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 data-[state=active]:bg-transparent hover:text-slate-700 transition-colors"
+              >
+                Prior Auth Queue
+              </TabsTrigger>
+              <TabsTrigger
+                value="graph"
+                className="gap-1.5 rounded-none border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-slate-500 data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 data-[state=active]:bg-transparent hover:text-slate-700 transition-colors"
+              >
                 <Network className="h-3.5 w-3.5" aria-hidden />
                 OSP Graph
               </TabsTrigger>
@@ -394,7 +402,7 @@ export function Dashboard() {
           {!loading && cases.length > 0 && (
             <>
             <motion.div
-              className="mb-8 grid grid-cols-4 gap-4"
+              className="mb-8 flex items-stretch gap-2"
               initial="hidden"
               animate="visible"
               variants={{
@@ -410,7 +418,7 @@ export function Dashboard() {
                     transition: { duration: 0.4 },
                   },
                 }}
-                className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm ring-1 ring-slate-900/5 border-t-2 border-t-indigo-500"
+                className="flex-1 rounded-xl border border-slate-200 bg-white p-6 shadow-sm ring-1 ring-slate-900/5 border-t-2 border-t-indigo-500"
               >
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1">Total Requests</p>
@@ -423,6 +431,17 @@ export function Dashboard() {
                   {(dashboardStats?.submitted_pending ?? 0)} pending payer response
                 </p>
               </motion.div>
+              <div className="flex items-center justify-center text-slate-300 self-center">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path
+                    d="M3 8h10M9 4l4 4-4 4"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
               <motion.div
                 variants={{
                   hidden: { opacity: 0 },
@@ -431,17 +450,30 @@ export function Dashboard() {
                     transition: { duration: 0.4 },
                   },
                 }}
-                className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm ring-1 ring-slate-900/5 border-t-2 border-t-indigo-500"
+                className="flex-[1.2] rounded-xl border border-indigo-200 bg-indigo-50/40 p-7 shadow-md shadow-indigo-100 ring-1 ring-slate-900/5 border-t-2 border-t-indigo-600"
               >
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1">Appeals Filed</p>
-                  <Zap className="h-4 w-4 text-indigo-400" />
+                  <p className="text-xs font-semibold uppercase tracking-widest text-indigo-500 mb-1">
+                    Appeals Filed
+                  </p>
+                  <Zap className="h-4 w-4 text-indigo-600" />
                 </div>
-                <p className="text-4xl font-bold tracking-tight text-slate-900 tabular-nums">
+                <p className="text-6xl font-bold tracking-tight text-indigo-700 tabular-nums">
                   {countAppeals}
                 </p>
                 <p className="mt-1 text-sm text-slate-500">Autonomously by Persist</p>
               </motion.div>
+              <div className="flex items-center justify-center text-slate-300 self-center">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path
+                    d="M3 8h10M9 4l4 4-4 4"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
               <motion.div
                 variants={{
                   hidden: { opacity: 0 },
@@ -450,7 +482,7 @@ export function Dashboard() {
                     transition: { duration: 0.4 },
                   },
                 }}
-                className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm ring-1 ring-slate-900/5 border-t-2 border-t-indigo-500"
+                className="flex-1 rounded-xl border border-slate-200 bg-white p-6 shadow-sm ring-1 ring-slate-900/5 border-t-2 border-t-indigo-500"
               >
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1">Hours Saved</p>
@@ -461,6 +493,17 @@ export function Dashboard() {
                 </p>
                 <p className="mt-1 text-sm text-slate-500">vs 2.5hrs manual per appeal</p>
               </motion.div>
+              <div className="flex items-center justify-center text-slate-300 self-center">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path
+                    d="M3 8h10M9 4l4 4-4 4"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
               <motion.div
                 variants={{
                   hidden: { opacity: 0 },
@@ -469,7 +512,7 @@ export function Dashboard() {
                     transition: { duration: 0.4 },
                   },
                 }}
-                className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm ring-1 ring-slate-900/5 border-t-2 border-t-indigo-500"
+                className="flex-1 rounded-xl border border-slate-200 bg-white p-6 shadow-sm ring-1 ring-slate-900/5 border-t-2 border-t-indigo-500"
               >
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1">Patterns Learned</p>
@@ -703,23 +746,23 @@ export function Dashboard() {
                 <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white ring-1 ring-slate-900/5">
                   <table className="w-full min-w-[720px] table-fixed text-left text-sm">
                     <thead>
-                      <tr className="border-b-2 border-slate-200 bg-slate-50/80">
-                        <th className="px-4 py-2.5 text-xs font-semibold uppercase tracking-widest text-slate-500">
+                      <tr className="border-b-2 border-slate-300 bg-slate-50">
+                        <th className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-600">
                           Patient
                         </th>
-                        <th className="px-4 py-2.5 text-xs font-semibold uppercase tracking-widest text-slate-500">
+                        <th className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-600">
                           Service
                         </th>
-                        <th className="px-4 py-2.5 text-xs font-semibold uppercase tracking-widest text-slate-500">
+                        <th className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-600">
                           Payer
                         </th>
-                        <th className="px-4 py-2.5 text-xs font-semibold uppercase tracking-widest text-slate-500">
+                        <th className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-600">
                           Submitted
                         </th>
-                        <th className="px-4 py-2.5 text-xs font-semibold uppercase tracking-widest text-slate-500">
+                        <th className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-600">
                           Status
                         </th>
-                        <th className="px-4 py-2.5 text-xs font-semibold uppercase tracking-widest text-slate-500">
+                        <th className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-600">
                           Action
                         </th>
                       </tr>
