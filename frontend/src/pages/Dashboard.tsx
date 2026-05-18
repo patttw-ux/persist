@@ -164,6 +164,7 @@ export function Dashboard() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [autoRunningIds, setAutoRunningIds] = useState<string[]>([]);
   const autoQueuedRef = useRef<Set<string>>(new Set());
+  const seedAttemptedRef = useRef(false);
   const [cmsDeadline, setCmsDeadline] = useState<CMSDeadlineCheckReport | null>(
     null
   );
@@ -259,6 +260,8 @@ export function Dashboard() {
     try {
       let data = await api.getAllCases();
       if (data.length === 0) {
+        if (seedAttemptedRef.current) return;
+        seedAttemptedRef.current = true;
         await api.seedDemoData();
         try {
           await api.seedPayerIntelligence();
