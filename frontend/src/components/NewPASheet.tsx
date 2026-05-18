@@ -559,7 +559,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
           <div>
             <label
               htmlFor="newpa-patient_name"
-              className="mb-1 block text-sm font-medium text-slate-700"
+              className="mb-1 block text-sm font-semibold text-slate-700"
             >
               Patient Name
             </label>
@@ -586,7 +586,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
           <div>
             <label
               htmlFor="newpa-dob"
-              className="mb-1 block text-sm font-medium text-slate-700"
+              className="mb-1 block text-sm font-semibold text-slate-700"
             >
               Date of Birth
             </label>
@@ -608,7 +608,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
           <div>
             <label
               htmlFor="newpa-member_id"
-              className="mb-1 block text-sm font-medium text-slate-700"
+              className="mb-1 block text-sm font-semibold text-slate-700"
             >
               Member ID
             </label>
@@ -632,7 +632,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
           <div>
             <label
               htmlFor="newpa-payer_name"
-              className="mb-1 block text-sm font-medium text-slate-700"
+              className="mb-1 block text-sm font-semibold text-slate-700"
             >
               Payer
             </label>
@@ -664,7 +664,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
           <div>
             <label
               htmlFor="newpa-cpt_code"
-              className="mb-1 block text-sm font-medium text-slate-700"
+              className="mb-1 block text-sm font-semibold text-slate-700"
             >
               CPT/HCPCS Code
             </label>
@@ -682,7 +682,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
           <div>
             <label
               htmlFor="newpa-drug_name"
-              className="mb-1 block text-sm font-medium text-slate-700"
+              className="mb-1 block text-sm font-semibold text-slate-700"
             >
               Drug / Service Name
             </label>
@@ -700,7 +700,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
           <div>
             <label
               htmlFor="newpa-diagnosis"
-              className="mb-1 block text-sm font-medium text-slate-700"
+              className="mb-1 block text-sm font-semibold text-slate-700"
             >
               Primary Diagnosis (ICD-10)
             </label>
@@ -718,7 +718,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
           <div>
             <label
               htmlFor="newpa-treatment_history"
-              className="mb-1 block text-sm font-medium text-slate-700"
+              className="mb-1 block text-sm font-semibold text-slate-700"
             >
               Treatment History
             </label>
@@ -784,7 +784,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
                   type="button"
                   onClick={() => void handleSubmitAnyway()}
                   disabled={submitting}
-                  className="inline-flex flex-1 items-center justify-center rounded-md px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                  className="inline-flex flex-1 items-center justify-center rounded-md px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                 >
                   Submit Anyway
                 </button>
@@ -884,7 +884,7 @@ export function NewPASheet({ open, onOpenChange, onSuccess }: NewPASheetProps) {
             <button
               type="button"
               onClick={() => onOpenChange(false)}
-              className="mt-2 inline-flex w-full items-center justify-center rounded-md px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              className="mt-2 inline-flex w-full items-center justify-center rounded-md px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
             >
               Cancel
             </button>

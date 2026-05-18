@@ -49,7 +49,7 @@ export function StatusBadge({ status, size = "default" }: StatusBadgeProps) {
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.2 }}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium",
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold",
         variants[variantKey],
         size === "sm" && "px-1.5 py-0 text-[10px]"
       )}

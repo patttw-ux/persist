@@ -90,11 +90,11 @@ export function AgentStep({
       <StatusIcon status={status} />
 
       <div className="min-w-0 flex-1">
-        <p className={cn("text-sm font-medium", LABEL_CLASS[status])}>
+        <p className={cn("text-sm font-medium leading-tight", LABEL_CLASS[status])}>
           {label}
         </p>
         {detail !== undefined && (
-          <p className="mt-0.5 text-xs text-slate-500">
+          <p className="mt-0.5 text-xs text-slate-500 leading-tight">
             {detail}
             {status === "running" && (
               <span className="animate-pulse text-indigo-400">▊</span>

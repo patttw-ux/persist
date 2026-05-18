@@ -16,12 +16,14 @@ import {
   AlertCircle,
   Brain,
   CheckCircle2,
+  ChevronDown,
   Clock,
   FileText,
   FileX,
   Network,
   Plus,
   RefreshCw,
+  X,
   Zap,
 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -170,6 +172,9 @@ export function Dashboard() {
   );
   const [activeTab, setActiveTab] = useState("queue");
   const [graphRefreshKey, setGraphRefreshKey] = useState(0);
+  const [patternsExpanded, setPatternsExpanded] = useState(false);
+  const [denialPatterns, setDenialPatterns] = useState<any[]>([]);
+  const [patternsLoading, setPatternsLoading] = useState(false);
   const userName = sessionStorage.getItem("persist_user") ?? "there";
   const displayName = userName.includes("@") ? userName.split("@")[0] : userName;
 
@@ -182,6 +187,21 @@ export function Dashboard() {
     dashboardStats?.denial_patterns_learned ?? 0,
     800
   );
+
+  const handlePatternsExpand = useCallback(async () => {
+    if (!patternsExpanded && denialPatterns.length === 0) {
+      setPatternsLoading(true);
+      try {
+        const result = await api.getDenialPatterns();
+        setDenialPatterns(result.patterns ?? []);
+      } catch {
+        setDenialPatterns([]);
+      } finally {
+        setPatternsLoading(false);
+      }
+    }
+    setPatternsExpanded((v) => !v);
+  }, [patternsExpanded, denialPatterns.length]);
 
   const refreshCmsDeadlines = useCallback(async () => {
     try {
@@ -298,7 +318,7 @@ export function Dashboard() {
             transition={{ duration: 0.4 }}
             className="mb-4"
           >
-            <p className="text-xl font-semibold text-slate-800">
+            <p className="mt-0.5 text-xl font-semibold tracking-tight text-slate-800">
               Welcome back,{" "}
               <span className="text-indigo-600 capitalize">{displayName}</span>
             </p>
@@ -333,7 +353,7 @@ export function Dashboard() {
               animate={{ opacity: 1 }}
               transition={{ duration: 0.2 }}
             >
-              <h1 className="text-2xl font-semibold text-slate-900">
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
                 Prior Authorization Queue
               </h1>
               <p className="mt-1 text-sm text-slate-500">
@@ -372,6 +392,7 @@ export function Dashboard() {
 
             <TabsContent value="queue" className="mt-0">
           {!loading && cases.length > 0 && (
+            <>
             <motion.div
               className="mb-8 grid grid-cols-4 gap-4"
               initial="hidden"
@@ -389,13 +410,13 @@ export function Dashboard() {
                     transition: { duration: 0.4 },
                   },
                 }}
-                className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-t-2 border-t-indigo-500"
+                className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm ring-1 ring-slate-900/5 border-t-2 border-t-indigo-500"
               >
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Requests</p>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1">Total Requests</p>
                   <FileText className="h-4 w-4 text-indigo-400" />
                 </div>
-                <p className="mt-4 text-4xl font-bold tracking-tight text-slate-900 tabular-nums">
+                <p className="text-4xl font-bold tracking-tight text-slate-900 tabular-nums">
                   {countTotal}
                 </p>
                 <p className="mt-1 text-sm text-slate-500">
@@ -410,13 +431,13 @@ export function Dashboard() {
                     transition: { duration: 0.4 },
                   },
                 }}
-                className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-t-2 border-t-indigo-500"
+                className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm ring-1 ring-slate-900/5 border-t-2 border-t-indigo-500"
               >
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Appeals Filed</p>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1">Appeals Filed</p>
                   <Zap className="h-4 w-4 text-indigo-400" />
                 </div>
-                <p className="mt-4 text-4xl font-bold tracking-tight text-slate-900 tabular-nums">
+                <p className="text-4xl font-bold tracking-tight text-slate-900 tabular-nums">
                   {countAppeals}
                 </p>
                 <p className="mt-1 text-sm text-slate-500">Autonomously by Persist</p>
@@ -429,13 +450,13 @@ export function Dashboard() {
                     transition: { duration: 0.4 },
                   },
                 }}
-                className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-t-2 border-t-indigo-500"
+                className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm ring-1 ring-slate-900/5 border-t-2 border-t-indigo-500"
               >
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Hours Saved</p>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1">Hours Saved</p>
                   <Clock className="h-4 w-4 text-indigo-400" />
                 </div>
-                <p className="mt-4 text-4xl font-bold tracking-tight text-slate-900 tabular-nums">
+                <p className="text-4xl font-bold tracking-tight text-slate-900 tabular-nums">
                   {dashboardStats?.hours_saved ? `${dashboardStats.hours_saved.toFixed(1)}h` : "--"}
                 </p>
                 <p className="mt-1 text-sm text-slate-500">vs 2.5hrs manual per appeal</p>
@@ -448,18 +469,152 @@ export function Dashboard() {
                     transition: { duration: 0.4 },
                   },
                 }}
-                className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-t-2 border-t-indigo-500"
+                className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm ring-1 ring-slate-900/5 border-t-2 border-t-indigo-500"
               >
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Patterns Learned</p>
-                  <Brain className="h-4 w-4 text-indigo-400" />
+                  <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1">Patterns Learned</p>
+                  <div className="flex items-center gap-2">
+                    <Brain className="h-4 w-4 text-indigo-400" />
+                    <motion.button
+                      type="button"
+                      onClick={() => void handlePatternsExpand()}
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      className="rounded p-0.5 text-slate-400 hover:text-indigo-600 transition-colors"
+                      aria-label="View learned patterns"
+                    >
+                      <motion.span
+                        animate={{ rotate: patternsExpanded ? 180 : 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="block"
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                      </motion.span>
+                    </motion.button>
+                  </div>
                 </div>
-                <p className="mt-4 text-4xl font-bold tracking-tight text-slate-900 tabular-nums">
+                <p className="text-4xl font-bold tracking-tight text-slate-900 tabular-nums">
                   {countPatterns}
                 </p>
                 <p className="mt-1 text-sm text-slate-500">Graph memory — getting smarter</p>
               </motion.div>
             </motion.div>
+            {patternsExpanded && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm"
+                onClick={() => setPatternsExpanded(false)}
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: 8 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className="relative w-full max-w-2xl max-h-[80vh] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl mx-4"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+                    <div>
+                      <h2 className="text-base font-semibold text-slate-900">
+                        Denial Patterns Learned
+                      </h2>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Powered by Jac Graph Intelligence ·{" "}
+                        {denialPatterns.length} patterns in memory
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPatternsExpanded(false)}
+                      className="rounded-lg p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="overflow-y-auto max-h-[60vh] px-6 py-4 space-y-3">
+                    {patternsLoading ? (
+                      <div className="flex items-center gap-2 py-4">
+                        <div
+                          className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce"
+                          style={{ animationDelay: "0ms" }}
+                        />
+                        <div
+                          className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce"
+                          style={{ animationDelay: "150ms" }}
+                        />
+                        <div
+                          className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce"
+                          style={{ animationDelay: "300ms" }}
+                        />
+                        <span className="text-xs text-slate-400">
+                          Loading patterns...
+                        </span>
+                      </div>
+                    ) : denialPatterns.length === 0 ? (
+                      <p className="text-sm text-slate-400 py-4 text-center">
+                        No patterns learned yet. Record appeal outcomes to build
+                        memory.
+                      </p>
+                    ) : (
+                      denialPatterns.map((p, i) => (
+                        <div
+                          key={p.pattern_id ?? i}
+                          className="rounded-xl border border-slate-200 bg-slate-50/50 p-4"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-semibold text-slate-900">
+                              {p.payer_name}
+                            </span>
+                            <span
+                              className={`text-sm font-bold ${
+                                (p.win_rate ?? 0) > 0.6
+                                  ? "text-green-600"
+                                  : "text-amber-600"
+                              }`}
+                            >
+                              {Math.round((p.win_rate ?? 0) * 100)}% win rate
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="inline-flex items-center rounded-full bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 text-xs font-medium text-indigo-600">
+                              {p.denial_type}
+                            </span>
+                            <span className="text-xs text-slate-400">
+                              {p.times_seen} cases · {p.times_won} won
+                            </span>
+                          </div>
+                          {p.successful_appeal_language && (
+                            <p className="text-xs text-slate-600 leading-relaxed">
+                              ✓ {p.successful_appeal_language}
+                            </p>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="border-t border-slate-100 px-6 py-3 flex items-center gap-1.5">
+                    <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
+                      <circle
+                        cx="5"
+                        cy="5"
+                        r="4"
+                        stroke="#6366F1"
+                        strokeWidth="1.5"
+                      />
+                      <circle cx="5" cy="5" r="1.5" fill="#6366F1" />
+                    </svg>
+                    <span className="text-xs text-indigo-400">
+                      Powered by Jac Graph Intelligence
+                    </span>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </>
           )}
 
           {!loading &&
@@ -545,26 +700,26 @@ export function Dashboard() {
               </div>
 
               <div className={loading ? "animate-pulse" : undefined}>
-                <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white ring-1 ring-slate-900/5">
                   <table className="w-full min-w-[720px] table-fixed text-left text-sm">
                     <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50">
-                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      <tr className="border-b-2 border-slate-200 bg-slate-50/80">
+                        <th className="px-4 py-2.5 text-xs font-semibold uppercase tracking-widest text-slate-500">
                           Patient
                         </th>
-                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        <th className="px-4 py-2.5 text-xs font-semibold uppercase tracking-widest text-slate-500">
                           Service
                         </th>
-                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        <th className="px-4 py-2.5 text-xs font-semibold uppercase tracking-widest text-slate-500">
                           Payer
                         </th>
-                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        <th className="px-4 py-2.5 text-xs font-semibold uppercase tracking-widest text-slate-500">
                           Submitted
                         </th>
-                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        <th className="px-4 py-2.5 text-xs font-semibold uppercase tracking-widest text-slate-500">
                           Status
                         </th>
-                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        <th className="px-4 py-2.5 text-xs font-semibold uppercase tracking-widest text-slate-500">
                           Action
                         </th>
                       </tr>
@@ -580,7 +735,9 @@ export function Dashboard() {
                         visible: { transition: { staggerChildren: 0.06 } },
                       }}
                     >
-                      {cases.map((c) => (
+                      {cases.map((c) => {
+                        const status = c.status as string;
+                        return (
                         <motion.tr
                           key={c.case_id}
                           variants={{
@@ -590,31 +747,43 @@ export function Dashboard() {
                               transition: { duration: 0.25 },
                             },
                           }}
-                          className="cursor-pointer border-b border-slate-100 transition-colors duration-100 transition-all duration-150 last:border-0 hover:bg-indigo-50/40"
+                          className={`cursor-pointer border-b border-slate-100 transition-colors duration-100 last:border-0 hover:bg-slate-50/80 border-l-2 ${
+                            status === "approved" || status === "appeal_won"
+                              ? "border-l-green-400"
+                              : status === "denied" || status === "denied_final"
+                                ? "border-l-red-400"
+                                : status === "appeal_submitted" ||
+                                    status === "appeal_filed" ||
+                                    status === "appeal_drafted"
+                                  ? "border-l-blue-400"
+                                  : status === "submitted" || status === "pending"
+                                    ? "border-l-amber-400"
+                                    : "border-l-slate-200"
+                          }`}
                           onClick={() => navigate(`/case/${c.case_id}`)}
                         >
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-2.5">
                             <p className="font-medium text-slate-900">
                               {c.patient_name}
                             </p>
                             <p className="text-xs text-slate-400">{c.dob}</p>
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-2.5">
                             <p className="text-slate-700">{c.drug_name}</p>
                             <p className="font-mono text-xs text-slate-400">
                               {c.cpt_code}
                             </p>
                           </td>
-                          <td className="px-4 py-3 text-sm text-slate-700">
+                          <td className="px-4 py-2.5 text-sm text-slate-700">
                             {c.payer_name}
                           </td>
-                          <td className="px-4 py-3 text-xs text-slate-400">
+                          <td className="px-4 py-2.5 text-xs text-slate-400">
                             {formatRelativeTime(c.submitted_at)}
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-2.5">
                             <StatusBadge status={c.status} size="sm" />
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-2.5">
                             <ActionCell
                               c={c}
                               navigate={navigate}
@@ -622,7 +791,8 @@ export function Dashboard() {
                             />
                           </td>
                         </motion.tr>
-                      ))}
+                        );
+                      })}
                     </motion.tbody>
                     )}
                   </table>

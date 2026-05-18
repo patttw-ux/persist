@@ -154,7 +154,7 @@ export function Login({ onLogin }: LoginProps) {
 
 
 
-      <main className="flex flex-1 flex-col h-screen overflow-y-auto bg-white">
+      <main className="flex flex-1 flex-col h-screen overflow-y-auto bg-white border-l border-slate-100">
 
         <div className="flex flex-1 items-center justify-center px-16 py-12">
 
@@ -177,7 +177,7 @@ export function Login({ onLogin }: LoginProps) {
 
           </div>
 
-          <h2 className="text-2xl font-semibold text-slate-900">Welcome back</h2>
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900">Welcome back</h2>
 
           <p className="mt-1 text-sm text-slate-500">
 
@@ -215,7 +215,7 @@ export function Login({ onLogin }: LoginProps) {
 
               onChange={(ev) => setEmail(ev.target.value)}
 
-              className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
 
               disabled={loading}
 
@@ -249,7 +249,7 @@ export function Login({ onLogin }: LoginProps) {
 
               onChange={(ev) => setPassword(ev.target.value)}
 
-              className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
 
               disabled={loading}
 

@@ -10,7 +10,7 @@ export function AppHeader() {
   }, []);
 
   return (
-    <header className="fixed top-0 z-50 w-full border-t-2 border-[#4F46E5] border-b border-[#E2E8F0] bg-white">
+    <header className="fixed top-0 z-50 w-full border-t-2 border-[#4F46E5] border-b border-[#E2E8F0] bg-white shadow-sm">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
         <div className="flex items-center gap-3">
           <img
@@ -18,9 +18,9 @@ export function AppHeader() {
             alt="Persist"
             className="h-8 w-8 rounded-lg object-cover shrink-0"
           />
-          <span className="font-semibold text-slate-900">Persist</span>
+          <span className="font-bold text-slate-900 tracking-tight">Persist</span>
           <span className="h-4 w-px bg-slate-200" aria-hidden />
-          <span className="text-sm text-slate-400">
+          <span className="text-sm text-slate-400 font-medium">
             Autonomous Prior Authorization
           </span>
         </div>
