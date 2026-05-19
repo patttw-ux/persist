@@ -12,6 +12,26 @@ Built entirely on Jac's Object Spatial Programming model, Persist autonomously d
 [![Claude](https://img.shields.io/badge/AI-Claude%20Sonnet-orange?style=flat-square)](https://www.anthropic.com/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
+## Screenshots
+
+![Jac OSP Graph](screenshots/osp_graph.png)
+*Live Jac OSP graph — 23 nodes, 22 edges, every clinical relationship persisted in real time across 7 node types*
+
+![Appeal Letter + FHIR Transmission](screenshots/appeal_letter.png)
+*Autonomous appeal letter citing CP.PHAR.118 and DAS28-CRP scores, transmitted via FHIR R4 Claim/$submit — HTTP 200 accepted*
+
+![Dashboard](screenshots/dashboard.png)
+*Live prior auth queue — real KPI data calculated from the Jac graph on every load*
+
+![Denial Patterns Learned](screenshots/denial_patterns.png)
+*Graph memory — denial patterns learned across payers, win rates updated with every outcome*
+
+![Case Detail + Agent Steps](screenshots/case_detail.png)
+*Real-time agent steps streaming from async Jac WebSocket walker*
+
+![Login](screenshots/login.png)
+*Session management with automatic timeout — Powered by Jac Graph Intelligence*
+
 ---
 
 ## The Problem
